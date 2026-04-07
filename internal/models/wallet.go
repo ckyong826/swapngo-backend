@@ -4,13 +4,31 @@ import "github.com/google/uuid"
 
 type Wallet struct {
 	Base
-	// foreign key to user
-	userId uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	// foreign key
+	accountId uuid.UUID `gorm:"type:uuid;not null;index" json:"account_id"`
+
+	// relationship
+	Account Account `gorm:"foreignKey:AccountID" json:"account"`
 
 	// wallet details
-	chainName string `gorm:"not null" json:"chain_name"`
+	chainName ChainName `gorm:"not null" json:"chain_name"`
 	address   string `gorm:"uniqueIndex;not null" json:"address"`
-	walletType string `gorm:"not null;default:'server_managed'" json:"wallet_type"`
-	isDefault  bool   `gorm:"not null;default:false" json:"is_default"`
-	status     string `gorm:"not null;default:'active'" json:"status"`
+	status    WalletStatus `gorm:"not null;default:'ACTIVE'" json:"status"`
+
 }
+
+type WalletStatus string
+
+const (
+	WalletActive   WalletStatus = "ACTIVE"
+	WalletInactive WalletStatus = "INACTIVE"
+)
+
+type ChainName string
+
+const (
+	ChainSui      ChainName = "SUI"
+	ChainEthereum ChainName = "ETHEREUM"
+	ChainSolana   ChainName = "SOLANA"
+	ChainPolygon  ChainName = "POLYGON"
+)

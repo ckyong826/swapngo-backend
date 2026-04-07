@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ckyong826/swapngo-backend/pkg/database"
-	"github.com/ckyong826/swapngo-backend/pkg/response"
+	"swapngo-backend/pkg/database"
+	"swapngo-backend/pkg/response"
 	"github.com/gin-gonic/gin"
-	"github.com/ckyong826/swapngo-backend/internal/models"
+	"swapngo-backend/internal/models"
 )
 
 func getenv(key, fallback string) string {

@@ -1,4 +1,4 @@
-module github.com/ckyong826/swapngo-backend
+module swapngo-backend
 
 go 1.25.0
 
