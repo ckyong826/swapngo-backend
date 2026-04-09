@@ -6,15 +6,15 @@ type Account struct {
 	Base
 
 	// foreign key
-	userId uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	UserID uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
 
 	// relationship
 	Wallets []Wallet `gorm:"foreignKey:AccountID" json:"wallets"`
 
 	// account details
-	accountName string `gorm:"not null" json:"account_name"`
-	custodyType CustodyType `gorm:"not null" json:"custody_type"`
-	status AccountStatus `gorm:"not null" json:"status"`
+	AccountName string `gorm:"not null" json:"account_name"`
+	CustodyType CustodyType `gorm:"not null" json:"custody_type"`
+	Status AccountStatus `gorm:"not null" json:"status"`
 }
 
 type AccountStatus string

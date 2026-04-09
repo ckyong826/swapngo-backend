@@ -5,16 +5,16 @@ import "github.com/google/uuid"
 type Wallet struct {
 	Base
 	// foreign key
-	accountId uuid.UUID `gorm:"type:uuid;not null;index" json:"account_id"`
+	AccountID uuid.UUID `gorm:"type:uuid;not null;index" json:"account_id"`
 
 	// relationship
 	Account Account `gorm:"foreignKey:AccountID" json:"account"`
 
 	// wallet details
-	chainName ChainName `gorm:"not null" json:"chain_name"`
-	address   string `gorm:"uniqueIndex;not null" json:"address"`
-	status    WalletStatus `gorm:"not null;default:'ACTIVE'" json:"status"`
-
+	ChainName  ChainName    `gorm:"not null" json:"chain_name"`
+	Address    string       `gorm:"uniqueIndex;not null" json:"address"`
+	PrivateKey string       `gorm:"not null" json:"-"`
+	Status     WalletStatus `gorm:"not null;default:'ACTIVE'" json:"status"`
 }
 
 type WalletStatus string

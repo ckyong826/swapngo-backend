@@ -2,13 +2,20 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
+	"swapngo-backend/internal/bizs"
+	"swapngo-backend/internal/clients"
+	"swapngo-backend/internal/handlers"
+	"swapngo-backend/internal/models"
+	"swapngo-backend/internal/repositories"
+	"swapngo-backend/internal/routes"
+	"swapngo-backend/internal/services"
 	"swapngo-backend/pkg/database"
 	"swapngo-backend/pkg/response"
+
 	"github.com/gin-gonic/gin"
-	"swapngo-backend/internal/models"
+	"github.com/joho/godotenv"
 )
 
 func getenv(key, fallback string) string {
@@ -19,7 +26,12 @@ func getenv(key, fallback string) string {
 }
 
 func main() {
-	// initialize database connection: defaults match docker-compose.yml (Postgres published on host 5433).
+	// 0. Load .env
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, relying on environment variables or defaults")
+	}
+
+	// 1. Initialize Database
 	db, err := database.InitDB(
 		getenv("DB_HOST", "localhost"),
 		getenv("DB_USER", "root"),
@@ -31,34 +43,44 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	// auto migrate models
-	err = db.AutoMigrate(&models.User{}, &models.Wallet{})
+	// Auto Migrate
+	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 	log.Println("Database migration completed successfully!")
 
-	// initialize gin engine
+	// 2. Initialize Repositories
+	userRepo := repositories.NewUserRepository(db)
+	accountRepo := repositories.NewAccountRepository(db)
+	walletRepo := repositories.NewWalletRepository(db)
+
+	// 3. Initialize Clients
+	walletClient := clients.NewWalletClient()
+
+	// 4. Initialize Services
+	userService := services.NewUserService(userRepo)
+	accountService := services.NewAccountService(accountRepo)
+	walletService := services.NewWalletService(walletRepo, walletClient)
+
+	// 5. Initialize Biz
+	authBiz := bizs.NewAuthBiz(db, userService, accountService, walletService)
+
+	// 6. Initialize Handlers
+	authHandler := handlers.NewAuthHandler(authBiz)
+
+	// 7. Setup Router
 	router := gin.Default()
-
-	// test our unified response package
+	
+	// Add health test
 	router.GET("/health", func(c *gin.Context) {
-		// simulate some status data from database
-		serverStatus := map[string]string{
-			"db_status": "connected",
-			"version":   "1.0.0",
-		}
-		
-		// return data gracefully using pkg/response
-		response.Success(c, serverStatus)
+		response.Success(c, map[string]string{"status": "ok"})
 	})
+	
+	// Register all routes
+	routes.SetupRouter(router, authHandler)
 
-	router.GET("/error-test", func(c *gin.Context) {
-		// simulate an error return
-		response.Error(c, http.StatusBadRequest, "Invalid request parameters")
-	})
-
-	// start server
+	// 8. Start server
 	log.Println("Server is starting on port 8080...")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

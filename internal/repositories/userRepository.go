@@ -4,14 +4,14 @@ import (
 	"context"
 
 	"swapngo-backend/internal/models"
+	"swapngo-backend/pkg/utils"
 
 	"gorm.io/gorm"
 )
 
 type UserRepository interface {
 	IBaseRepository[models.User]
-	FindByPhoneNumber(ctx context.Context, phoneNumber string) (models.User, error)
-	FindByEmail(ctx context.Context, email string) (models.User, error)
+	CheckExist(ctx context.Context, phoneNumber string, email string, username string) (*models.User, error)
 }
 
 type userRepository struct {
@@ -26,14 +26,7 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 	}
 }
 
-func (r *userRepository) FindByPhoneNumber(ctx context.Context, phoneNumber string) (models.User, error) {
-	var user models.User
-	err := r.db.WithContext(ctx).Where("phone_number = ?", phoneNumber).First(&user).Error
-	return user, err
-}
-
-func (r *userRepository) FindByEmail(ctx context.Context, email string) (models.User, error) {
-	var user models.User
-	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
-	return user, err
+func (r *userRepository) CheckExist(ctx context.Context, phoneNumber string, email string, username string) (*models.User, error) {
+	query := r.db.WithContext(ctx).Where("phone_number = ? OR email = ? OR username = ?", phoneNumber, email, username)
+	return utils.FirstOrNil[models.User](query)
 }
