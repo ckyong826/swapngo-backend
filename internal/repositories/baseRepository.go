@@ -15,7 +15,6 @@ type IBaseRepository[T any] interface {
 	Update(ctx context.Context, entity *T) (*T, error)
 	Delete(ctx context.Context, entity *T) (*T, error)
 	
-	// 🌟 全部统一为直接返回实体指针或切片
 	FindByID(ctx context.Context, id uuid.UUID) (*T, error)
 	FindByIDs(ctx context.Context, ids []uuid.UUID) ([]*T, error)
 	LockById(ctx context.Context, id uuid.UUID) (*T, error)

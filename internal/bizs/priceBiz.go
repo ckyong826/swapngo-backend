@@ -28,15 +28,16 @@ func (b *priceBiz) StartPushing(userID string) {
 			ethPrice := clients.LatestPrices["ETHUSDT"]
 			suiPrice := clients.LatestPrices["SUIUSDT"]
 			solPrice := clients.LatestPrices["SOLUSDT"]
+			usdMyrRate := clients.LatestPrices["USDMYR"]
 			clients.PriceMux.RUnlock()
 
 			// 2. 构造推送负载
 			pushData := map[string]any{
-				"type": "BALANCE_UPDATE",
 				"prices": map[string]any{
 					"ETH":  ethPrice,
 					"SUI":  suiPrice,
 					"SOL":  solPrice,
+					"USDMYR": usdMyrRate,
 				},
 				"timestamp": time.Now().Unix(),
 			}

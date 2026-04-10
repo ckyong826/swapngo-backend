@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// 定义一个专属的 Context Key，防止和其他包的变量冲突
 type txKey struct{}
 
 // RunInTx 是一个全局的事务调度器
