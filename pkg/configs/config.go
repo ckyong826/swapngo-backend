@@ -10,6 +10,9 @@ import (
 
 // AppConfig holds all global environment variables
 type Config struct {
+	SUIChainURL string
+	SOLChainURL string
+	EVMChainURL string
 	JWTSecret      []byte
 	JWTAccessTime  time.Duration
 	JWTRefreshTime time.Duration
@@ -45,10 +48,28 @@ func Load() {
 		log.Fatal("FATAL: JWT_SECRET environment variable is required but missing!")
 	}
 
+	suiChainURL := os.Getenv("SUI_CHAIN_URL")
+	if suiChainURL == "" {
+		log.Fatal("FATAL: SUI_CHAIN_URL environment variable is required but missing!")
+	}
+
+	solChainURL := os.Getenv("SOL_CHAIN_URL")
+	if solChainURL == "" {
+		log.Fatal("FATAL: SOL_CHAIN_URL environment variable is required but missing!")
+	}
+
+	evmChainURL := os.Getenv("EVM_CHAIN_URL")
+	if evmChainURL == "" {
+		log.Fatal("FATAL: EVM_CHAIN_URL environment variable is required but missing!")
+	}
+
 	// Populate the global config
 	Env = &Config{
 		JWTSecret:      []byte(secret),
 		JWTAccessTime:  accessTime,
 		JWTRefreshTime: refreshTime,
+		SUIChainURL:    suiChainURL,
+		SOLChainURL:    solChainURL,
+		EVMChainURL:    evmChainURL,
 	}
 }

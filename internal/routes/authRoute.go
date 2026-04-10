@@ -10,9 +10,9 @@ import (
 )
 
 func AuthRoutes(router *gin.RouterGroup, authHandler handlers.AuthHandler) {
-	authGroup := router.Group("/auth")
+	publicAuth := router.Group("/public/auth")
 	{
-		authGroup.POST("/register", utils.Handle[authReq.RegisterRequest]("Successfully registered", authHandler.Register))
-		authGroup.POST("/login", utils.Handle[authReq.LoginRequest]("Successfully logged in", authHandler.Login))
+		publicAuth.POST("/register", utils.Handle[authReq.RegisterRequest]("Successfully registered", authHandler.Register))
+		publicAuth.POST("/login", utils.Handle[authReq.LoginRequest]("Successfully logged in", authHandler.Login))
 	}
 }

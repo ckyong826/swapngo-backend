@@ -11,6 +11,7 @@ import (
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/routes"
 	"swapngo-backend/internal/services"
+	"swapngo-backend/internal/ws"
 	config "swapngo-backend/pkg/configs"
 	"swapngo-backend/pkg/database"
 
@@ -60,6 +61,8 @@ func main() {
 
 	// 3. Initialize Clients
 	walletClient := clients.NewWalletClient()
+	hub := ws.NewHub()
+	clients.StartPriceWorker()
 
 	// 4. Initialize Services
 	userService := services.NewUserService(userRepo)
@@ -68,15 +71,18 @@ func main() {
 
 	// 5. Initialize Biz
 	authBiz := bizs.NewAuthBiz(db, userService, accountService, walletService)
+	priceBiz := bizs.NewPriceBiz(hub)
 
 	// 6. Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authBiz)
+	priceHandler := handlers.NewPriceHandler(priceBiz, hub)
+	walletHandler := handlers.NewWalletHandler(walletService)
 
 	// 7. Setup Router
 	router := gin.Default()
 	
 	// Register all routes
-	routes.SetupRouter(router, authHandler)
+	routes.SetupRouter(router, authHandler, priceHandler, walletHandler)
 
 	// 8. Start server
 	log.Println("Server is starting on port 8080...")

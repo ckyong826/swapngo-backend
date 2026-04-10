@@ -2,21 +2,19 @@ package routes
 
 import (
 	"swapngo-backend/internal/handlers"
-	"swapngo-backend/pkg/middlewares"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(engine *gin.Engine, authHandler handlers.AuthHandler) {
+func SetupRouter(engine *gin.Engine, authHandler handlers.AuthHandler, priceHandler handlers.PriceHandler, walletHandler handlers.WalletHandler) {
 	api := engine.Group("/api/v1")
-	public := api.Group("/public")
 	{
-		AuthRoutes(public, authHandler)
+		AuthRoutes(api, authHandler)
+		WalletRoutes(api, walletHandler)
 	}
-	private := api.Group("/private")
-	// Private route need bearer token to access
-	private.Use(middlewares.AuthMiddleware())
+
+	wsGroup := engine.Group("/ws")
 	{
-		
+		wsGroup.GET("/prices", priceHandler.HandleWS)
 	}
 }
