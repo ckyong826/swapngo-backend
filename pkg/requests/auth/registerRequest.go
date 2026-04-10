@@ -1,4 +1,4 @@
-package requests
+package auth
 
 import "swapngo-backend/internal/models"
 

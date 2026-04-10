@@ -4,13 +4,13 @@ import (
 	"context"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
-	"swapngo-backend/pkg/requests"
+	authReq "swapngo-backend/pkg/requests/auth"
 
 	"github.com/google/uuid"
 )
 
 type AccountService interface {
-	CreateAccount(ctx context.Context, req *requests.RegisterRequest, userID uuid.UUID) (models.Account, error)
+	CreateAccount(ctx context.Context, req *authReq.RegisterRequest, userID uuid.UUID) (models.Account, error)
 }
 
 type accountService struct {
@@ -23,7 +23,7 @@ func NewAccountService(repo repositories.AccountRepository) AccountService {
 	}
 }
 
-func (s *accountService) CreateAccount(ctx context.Context, req *requests.RegisterRequest, userID uuid.UUID) (models.Account, error) {
+func (s *accountService) CreateAccount(ctx context.Context, req *authReq.RegisterRequest, userID uuid.UUID) (models.Account, error) {
 	
 	account := models.Account{
 		UserID: userID,

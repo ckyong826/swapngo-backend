@@ -11,8 +11,8 @@ import (
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/routes"
 	"swapngo-backend/internal/services"
+	config "swapngo-backend/pkg/configs"
 	"swapngo-backend/pkg/database"
-	"swapngo-backend/pkg/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -30,6 +30,9 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, relying on environment variables or defaults")
 	}
+
+	// Load config
+	config.Load()
 
 	// 1. Initialize Database
 	db, err := database.InitDB(
@@ -71,11 +74,6 @@ func main() {
 
 	// 7. Setup Router
 	router := gin.Default()
-	
-	// Add health test
-	router.GET("/health", func(c *gin.Context) {
-		response.Success(c, map[string]string{"status": "ok"})
-	})
 	
 	// Register all routes
 	routes.SetupRouter(router, authHandler)

@@ -5,13 +5,12 @@ import (
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
-	"swapngo-backend/pkg/requests"
 
 	"github.com/google/uuid"
 )
 
 type WalletService interface {
-	GenerateWalletsForAccount(ctx context.Context, req *requests.RegisterRequest, accountId uuid.UUID) error
+	GenerateWalletsForAccount(ctx context.Context, accountId uuid.UUID) error
 }
 
 type walletService struct {
@@ -26,7 +25,7 @@ func NewWalletService(repo repositories.WalletRepository, client clients.WalletC
 	}
 }
 
-func (s *walletService) GenerateWalletsForAccount(ctx context.Context, req *requests.RegisterRequest, accountId uuid.UUID) error {
+func (s *walletService) GenerateWalletsForAccount(ctx context.Context, accountId uuid.UUID) error {
 	// 1. Define each chains
 	chains := []models.ChainName{
 		models.ChainSui,

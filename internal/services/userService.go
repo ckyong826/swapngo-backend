@@ -5,12 +5,13 @@ import (
 	"errors"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
-	"swapngo-backend/pkg/requests"
+	authReq "swapngo-backend/pkg/requests/auth"
 	"swapngo-backend/pkg/utils"
 )
 
 type UserService interface {
-	RegisterUser(ctx context.Context, req *requests.RegisterRequest) (models.User, error)
+	RegisterUser(ctx context.Context, req *authReq.RegisterRequest) (models.User, error)
+	VerifyUser(ctx context.Context, req *authReq.LoginRequest) (models.User, error)
 }
 
 type userService struct {
@@ -23,7 +24,7 @@ func NewUserService(repo repositories.UserRepository) UserService {
 	}
 }
 
-func (s *userService) RegisterUser(ctx context.Context, req *requests.RegisterRequest) (models.User, error) {
+func (s *userService) RegisterUser(ctx context.Context, req *authReq.RegisterRequest) (models.User, error) {
 	// 1. Check if user already exists
 	existingUser, err := s.userRepo.CheckExist(ctx, req.PhoneNumber, req.Email, req.Username)
 	if err != nil {
@@ -77,3 +78,26 @@ func (s *userService) RegisterUser(ctx context.Context, req *requests.RegisterRe
 	return *user, nil
 }
 
+func (s *userService) VerifyUser(ctx context.Context, req *authReq.LoginRequest) (models.User, error) {
+	// 1. Check if user exists
+	user, err := s.userRepo.CheckExist(ctx, req.PhoneNumber, req.Email, req.Username)
+	if err != nil {
+		return models.User{}, err
+	}
+	if user == nil {
+		return models.User{}, errors.New("user not found")
+	}
+
+	// 2. Verify password
+	valid, err := utils.CheckPassword(user.PasswordHash, req.Password)
+	if err != nil {
+		return models.User{}, err
+	}
+	if !valid {
+		return models.User{}, errors.New("invalid password")
+	}
+
+	return *user, nil
+}
+		
+	
