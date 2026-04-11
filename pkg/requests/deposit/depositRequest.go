@@ -6,6 +6,6 @@ type InitiateDepositReq struct {
 
 type WebhookReq struct {
 	// 假设这是 Billplz/Stripe 传来的参数
-	ID    string `json:"id"`
-	State string `json:"state"` // 例如 "paid" 或 "due"
+	ID    string `json:"id" form:"id"`
+	State string `json:"state" form:"state"` // 例如 "paid" 或 "due"
 }

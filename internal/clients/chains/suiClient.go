@@ -83,3 +83,10 @@ func (c *suiClient) GetBalance(ctx context.Context, address string) (string, err
 
 	return fmt.Sprintf("%.6f", suiBalance), nil
 }
+
+func (c *suiClient) TransferMYRC(ctx context.Context, toAddress string, amount float64) (string, error) {
+	// TODO: Implement actual SUI transaction signing and execution for MYRC token transfer.
+	// This requires an admin private key and the MYRC token contract address.
+	// For now, we return a mock transaction hash to simulate a successful mint.
+	return "mocked_sui_tx_hash_for_myrc_mint", nil
+}

@@ -14,7 +14,7 @@ const (
 type Deposit struct {
 	Base
 	// foreign key
-	UserID       uuid.UUID `gorm:"type:uuid;not null"`
+	AccountID       uuid.UUID `gorm:"type:uuid;not null"`
 	
 	AmountMYR    float64   `gorm:"not null"`
 	AmountMYRC   float64   `gorm:"not null"`
