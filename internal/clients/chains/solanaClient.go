@@ -74,6 +74,6 @@ func (c *solanaClient) GetBalance(ctx context.Context, address string) (string, 
 	return fmt.Sprintf("%.6f", solBalance), nil
 }
 
-func (c *solanaClient) TransferMYRC(ctx context.Context, toAddress string, amount float64) (string, error) {
+func (c *solanaClient) TransferMYRC(ctx context.Context, fromAddress, toAddress string, amount float64) (string, error) {
 	return "", fmt.Errorf("TransferMYRC not implemented for Solana")
 }

@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,10 +9,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+	"swapngo-backend/pkg/responses/payment"
 )
 
 type IPaymentClient interface {
 	CreateBill(ctx context.Context, email, name string, amount float64, description, callbackURL, collectionID string) (*CreateBillRes, error)
+	PayoutToBank(ctx context.Context, amount float64, bankName, bankAccountNo string) (string, error)
 }
 
 type CreateBillRes struct {
@@ -70,4 +74,51 @@ func (c *billplzClient) CreateBill(ctx context.Context, email, name string, amou
 	}
 
 	return &billRes, nil
+}
+
+func (c *billplzClient) PayoutToBank(ctx context.Context, amount float64, bankName, bankAccountNo string) (string, error) {
+	amountInCents := int(amount * 100)
+
+	payload := map[string]any{
+		"amount":          amountInCents,
+		"currency":        "MYR",
+		"bank_name":       bankName,
+		"bank_account_no": bankAccountNo,
+		"reference":       fmt.Sprintf("WD-%d", time.Now().Unix()),
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payout payload: %w", err)
+	}
+
+	reqURL := fmt.Sprintf("%s/payouts", c.apiURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to create payout request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(c.apiKey, "")
+
+	// Stimulate Payout API
+	return fmt.Sprintf("MOCK_PAYOUT_%d", time.Now().Unix()), nil
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute payout request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("payout API error (status: %s): %s", resp.Status, string(respBody))
+	}
+
+	var payoutRes payment.PayoutRes
+	if err := json.NewDecoder(resp.Body).Decode(&payoutRes); err != nil {
+		return "", fmt.Errorf("failed to decode payout response: %w", err)
+	}
+
+	return payoutRes.TransactionID, nil
 }

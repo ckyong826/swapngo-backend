@@ -16,6 +16,7 @@ type Config struct {
 	JWTSecret      []byte
 	JWTAccessTime  time.Duration
 	JWTRefreshTime time.Duration
+	TreasuryAddress string
 }
 
 // Global instance
@@ -63,6 +64,11 @@ func Load() {
 		log.Fatal("FATAL: EVM_CHAIN_URL environment variable is required but missing!")
 	}
 
+	treasuryAddress := os.Getenv("TREASURY_ADDRESS")
+	if treasuryAddress == "" {
+		log.Fatal("FATAL: TREASURY_ADDRESS environment variable is required but missing!")
+	}
+
 	// Populate the global config
 	Env = &Config{
 		JWTSecret:      []byte(secret),
@@ -71,5 +77,6 @@ func Load() {
 		SUIChainURL:    suiChainURL,
 		SOLChainURL:    solChainURL,
 		EVMChainURL:    evmChainURL,
+		TreasuryAddress: treasuryAddress,
 	}
 }

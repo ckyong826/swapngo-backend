@@ -63,6 +63,6 @@ func (c *evmClient) GetBalance(ctx context.Context, address string) (string, err
 	return ethValue.Text('f', 6), nil // 保留 6 位小数
 }
 
-func (c *evmClient) TransferMYRC(ctx context.Context, toAddress string, amount float64) (string, error) {
+func (c *evmClient) TransferMYRC(ctx context.Context, fromAddress, toAddress string, amount float64) (string, error) {
 	return "", fmt.Errorf("TransferMYRC not implemented for EVM")
 }
