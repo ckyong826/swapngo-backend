@@ -43,7 +43,7 @@ func (s *tokenService) MintingMYRCBySUI(ctx context.Context, accountID string, a
 	}
 
 	// 2. Execute the on-chain minting
-	txHash, err := s.suiClient.TransferMYRC(ctx, config.Env.TreasuryAddress, wallet.Address, amount)
+	txHash, err := s.suiClient.TransferMYRC(ctx, config.Env.SUITreasuryPriv, config.Env.SUITreasuryAddress, wallet.Address, amount)
 	if err != nil {
 		return "", fmt.Errorf("chain transfer failed: %w", err)
 	}
@@ -62,7 +62,7 @@ func (s *tokenService) TransferToTreasury(ctx context.Context, accountID string,
 
 	privateKey := wallet.PrivateKey
 
-	txHash, err := s.suiClient.TransferMYRC(ctx, privateKey, config.Env.TreasuryAddress, amount)
+	txHash, err := s.suiClient.TransferMYRC(ctx, privateKey, wallet.Address, config.Env.SUITreasuryAddress, amount)
 	if err != nil {
 		return "", fmt.Errorf("blockchain transfer to treasury failed: %w", err)
 	}
@@ -83,7 +83,7 @@ func (s *tokenService) TransferToAddress(ctx context.Context, senderUserID strin
 	}
 
 	// 2. 调用 SUI 链进行转账
-	txHash, err := s.suiClient.TransferMYRC(ctx, wallet.PrivateKey, toAddress, amount)
+	txHash, err := s.suiClient.TransferMYRC(ctx, wallet.PrivateKey, wallet.Address, toAddress, amount)
 	if err != nil {
 		return "", fmt.Errorf("blockchain transfer failed: %w", err)
 	}

@@ -16,7 +16,10 @@ type Config struct {
 	JWTSecret      []byte
 	JWTAccessTime  time.Duration
 	JWTRefreshTime time.Duration
-	TreasuryAddress string
+	SUITreasuryAddress string
+	SUIPackageID string
+	SUITreasuryCapID string
+	SUITreasuryPriv string
 }
 
 // Global instance
@@ -64,9 +67,24 @@ func Load() {
 		log.Fatal("FATAL: EVM_CHAIN_URL environment variable is required but missing!")
 	}
 
-	treasuryAddress := os.Getenv("TREASURY_ADDRESS")
-	if treasuryAddress == "" {
-		log.Fatal("FATAL: TREASURY_ADDRESS environment variable is required but missing!")
+	suiTreasuryAddress := os.Getenv("SUI_TREASURY_ADDRESS")
+	if suiTreasuryAddress == "" {
+		log.Fatal("FATAL: SUI_TREASURY_ADDRESS environment variable is required but missing!")
+	}
+
+	suiPackageID := os.Getenv("MYRC_SUI_PACKAGE_ID")
+	if suiPackageID == "" {
+		log.Fatal("FATAL: SUI_PACKAGE_ID environment variable is required but missing!")
+	}
+
+	suiTreasuryCapID := os.Getenv("MYRC_SUI_TREASURY_CAP_ID")
+	if suiTreasuryCapID == "" {
+		log.Fatal("FATAL: SUI_TREASURY_CAP_ID environment variable is required but missing!")
+	}
+
+	suiTreasuryPriv := os.Getenv("SUI_TREASURY_PRIVATE_KEY")
+	if suiTreasuryPriv == "" {
+		log.Fatal("FATAL: SUI_TREASURY_PRIVATE_KEY environment variable is required but missing!")
 	}
 
 	// Populate the global config
@@ -77,6 +95,9 @@ func Load() {
 		SUIChainURL:    suiChainURL,
 		SOLChainURL:    solChainURL,
 		EVMChainURL:    evmChainURL,
-		TreasuryAddress: treasuryAddress,
+		SUITreasuryAddress: suiTreasuryAddress,
+		SUIPackageID: suiPackageID,
+		SUITreasuryCapID: suiTreasuryCapID,
+		SUITreasuryPriv: suiTreasuryPriv,
 	}
 }

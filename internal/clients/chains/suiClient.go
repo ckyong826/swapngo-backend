@@ -1,92 +1,150 @@
 package chains
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"log"
 	"strconv"
 
+	config "swapngo-backend/pkg/configs"
+
+	"github.com/block-vision/sui-go-sdk/models"
+	"github.com/block-vision/sui-go-sdk/sui"
 	"golang.org/x/crypto/blake2b"
 )
 
 type suiClient struct {
-	rpcURL string
+	client        sui.ISuiAPI // FIX: Changed from string to sui.ISuiAPI
+	packageID     string
+	treasuryCapID string
+	treasuryPriv  string
 }
 
+// Ensure you pass your config variables correctly here
 func NewSuiClient(rpcURL string) IChainClient {
-	return &suiClient{rpcURL: rpcURL}
+	cli := sui.NewSuiClient(rpcURL)
+	return &suiClient{
+		client:        cli,
+		packageID:     config.Env.SUIPackageID,
+		treasuryCapID: config.Env.SUITreasuryCapID,
+		treasuryPriv:  config.Env.SUITreasuryPriv,
+	}
 }
 
+// ==========================================
+// 1. GENERATE WALLET
+// ==========================================
 func (c *suiClient) GenerateAddress() (string, string, error) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate sui keys: %w", err)
 	}
 
-	data := make([]byte, 1+ed25519.PublicKeySize)
-	data[0] = 0x00 
-	copy(data[1:], publicKey)
+	addrData := make([]byte, 1+ed25519.PublicKeySize)
+	addrData[0] = 0x00 
+	copy(addrData[1:], publicKey)
 
-	hash := blake2b.Sum256(data)
+	hash := blake2b.Sum256(addrData)
 	address := "0x" + hex.EncodeToString(hash[:])
 
-	privateKeyHex := hex.EncodeToString(privateKey)
+	seed := privateKey[:ed25519.SeedSize]
+	privData := make([]byte, 1+ed25519.SeedSize)
+	privData[0] = 0x00 
+	copy(privData[1:], seed)
 
-	return address, privateKeyHex, nil
+	privateKeyBase64 := base64.StdEncoding.EncodeToString(privData)
+
+	return address, privateKeyBase64, nil
 }
 
+// ==========================================
+// 2. TRANSFER 
+// ==========================================
+func (c *suiClient) TransferMYRC(ctx context.Context, fromPrivateKey string, fromAddress string, toAddress string, amount float64) (string, error) {
+	amountWithDecimals := uint64(amount * 1_000_000)
+
+	privData, err := base64.StdEncoding.DecodeString(fromPrivateKey)
+	if err != nil || len(privData) != 33 {
+		return "", fmt.Errorf("invalid private key format or length")
+	}
+	
+	// Skip the 0x00 flag byte, grab the 32-byte seed, and reconstruct the key
+	seed := privData[1:]
+	ed25519PrivKey := ed25519.NewKeyFromSeed(seed)
+
+	// 1. Fetch user's coins
+	myrcCoinType := fmt.Sprintf("%s::myrc::MYRC", c.packageID)
+	getCoinsReq := models.SuiXGetCoinsRequest{
+		Owner:    fromAddress, 
+		CoinType: myrcCoinType,
+	}
+
+	coinsRsp, err := c.client.SuiXGetCoins(ctx, getCoinsReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch user coins: %w", err)
+	}
+
+	if len(coinsRsp.Data) == 0 {
+		return "", fmt.Errorf("insufficient MYRC balance: no coins found")
+	}
+
+	var inputCoinIDs []string
+	for _, coin := range coinsRsp.Data {
+		inputCoinIDs = append(inputCoinIDs, coin.CoinObjectId)
+	}
+
+	// 2. Build Pay transaction
+	payReq := models.PayRequest{
+		Signer:      fromAddress,  
+		SuiObjectId: inputCoinIDs, 
+		Recipient:   []string{toAddress},
+		Amount:      []string{strconv.FormatUint(amountWithDecimals, 10)},
+		GasBudget:   "10000000",
+	}
+
+	rsp, err := c.client.Pay(ctx, payReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to build pay PTB: %w", err)
+	}
+
+	// 3. Sign and execute
+	txResult, err := c.client.SignAndExecuteTransactionBlock(ctx, models.SignAndExecuteTransactionBlockRequest{
+		TxnMetaData: rsp,
+		PriKey:      ed25519PrivKey,
+		Options:     models.SuiTransactionBlockOptions{ShowEffects: true},
+		RequestType: "WaitForLocalExecution",
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to execute transfer: %w", err)
+	}
+
+	log.Printf("Transferred %f MYRC to %s. TxHash: %s", amount, toAddress, txResult.Digest)
+	return txResult.Digest, nil
+}
+// ==========================================
+// 3. GET BALANCE
+// ==========================================
 func (c *suiClient) GetBalance(ctx context.Context, address string) (string, error) {
-	// 构造 Sui JSON-RPC 请求 (查询原生 SUI 代币)
-	payload := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "suix_getBalance",
-		"params":  []any{address, "0x2::sui::SUI"},
+	coinType := fmt.Sprintf("%s::myrc::MYRC", c.packageID)
+	req := models.SuiXGetBalanceRequest{
+		Owner:    address,
+		CoinType: coinType,
 	}
-	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.rpcURL, bytes.NewBuffer(body))
+	balanceRsp, err := c.client.SuiXGetBalance(ctx, req)
 	if err != nil {
-		return "0", err
+		return "0", fmt.Errorf("failed to get balance: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	totalCoinsRaw, err := strconv.ParseFloat(balanceRsp.TotalBalance, 64)
 	if err != nil {
-		return "0", err
-	}
-	defer resp.Body.Close()
-
-	// 解析返回结果
-	var rpcResponse struct {
-		Result struct {
-			TotalBalance string `json:"totalBalance"` // Sui 节点返回的是字符串类型的 MIST
-		} `json:"result"`
-		Error any `json:"error"`
+		return "0", fmt.Errorf("failed to parse balance: %w", err)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResponse); err != nil {
-		return "0", err
-	}
-	if rpcResponse.Error != nil {
-		return "0", fmt.Errorf("rpc error: %v", rpcResponse.Error)
-	}
-
-	// 将字符串 MIST 解析并转换为 SUI (1 SUI = 1,000,000,000 MIST)
-	mist, _ := strconv.ParseFloat(rpcResponse.Result.TotalBalance, 64)
-	suiBalance := mist / 1e9
-
-	return fmt.Sprintf("%.6f", suiBalance), nil
-}
-
-func (c *suiClient) TransferMYRC(ctx context.Context, fromAddress, toAddress string, amount float64) (string, error) {
-	// TODO: Implement actual SUI transaction signing and execution for MYRC token transfer.
-	// This requires an admin private key and the MYRC token contract address.
-	// For now, we return a mock transaction hash to simulate a successful mint.
-	return "mocked_sui_tx_hash_for_myrc_mint", nil
+	return strconv.FormatFloat(totalCoinsRaw / 1_000_000_000_000_000.0, 'f', -1, 64), nil
 }
