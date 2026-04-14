@@ -12,6 +12,7 @@ type WalletRepository interface {
 	IBaseRepository[models.Wallet]
 	FindByAccountId(ctx context.Context, accountID uuid.UUID) ([]models.Wallet, error)
 	FindByAccountIdAndChain(ctx context.Context, accountID uuid.UUID, chain string) (*models.Wallet, error)
+	FindByAddress(ctx context.Context, address string) (*models.Wallet, error)
 }
 
 type walletRepository struct {
@@ -44,7 +45,14 @@ func (r *walletRepository) FindByAccountIdAndChain(ctx context.Context, accountI
 	return &wallet, nil
 }
 
-
+func (r *walletRepository) FindByAddress(ctx context.Context, address string) (*models.Wallet, error) {
+	var wallet models.Wallet
+	err := r.db.Where("address = ?", address).First(&wallet).Error
+	if err != nil {
+		return nil, err
+	}
+	return &wallet, nil
+}
 
 
 

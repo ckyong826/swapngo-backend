@@ -21,7 +21,7 @@ func NewDepositHandler(depositBiz bizs.DepositBiz) DepositHandler {
 }
 
 func (h *depositHandler) DepositMYRC(ctx *gin.Context, req *requests.InitiateDepositReq) (any, error) {
-	userID := ctx.GetString("userID")
+	userID := ctx.GetString("user_id")
 	walletResponse, err := h.depositBiz.InitiateDepositMYRC(ctx, req, userID)
 	if err != nil {
 		return nil, err

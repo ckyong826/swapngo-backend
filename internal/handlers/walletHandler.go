@@ -8,6 +8,7 @@ import (
 
 type WalletHandler interface {
 	GetTotalBalanceByUserID(ctx *gin.Context, req *any) (any, error)
+	
 }
 
 type walletHandler struct {

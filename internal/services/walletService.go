@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strconv"
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
@@ -14,6 +15,7 @@ import (
 type WalletService interface {
 	GenerateWalletsForAccount(ctx context.Context, accountId uuid.UUID) error
 	GetTotalBalanceByUserID(ctx context.Context, userID string) ([]wallet.WalletResponse, error)
+	CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error)
 }
 
 type walletService struct {
@@ -98,4 +100,31 @@ func (s *walletService) GetTotalBalanceByUserID(ctx context.Context, userID stri
 	}
 
 	return walletResponses, nil
+}
+
+func (s *walletService) CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error) {
+	accounts, err := s.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil {
+		return false, err
+	}
+	if len(accounts) == 0 {
+		return false, errors.New("account not found")
+	}
+
+	// TODO : Temporarily only support one account for one user
+	if len(accounts) > 1 {
+		return false, errors.New("multiple accounts found")
+	}
+
+	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(chain))
+	if err != nil {
+		return false, err
+	}
+
+	balance, err := s.walletClient.GetBalance(ctx, wallet.ChainName, wallet.Address)
+	if err != nil {
+		return false, err
+	}
+
+	return balance < strconv.FormatFloat(amount, 'f', 6, 64), nil
 }

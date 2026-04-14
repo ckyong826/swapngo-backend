@@ -16,39 +16,45 @@ import (
 )
 
 type TransferBiz interface {
-	InitiateTransfer(ctx context.Context, senderID string, toAddress string, amount float64) (*models.Transfer, error)
+	InitiateTransfer(ctx context.Context, userID string, fromAddress string, toAddress string, amount float64) (*models.Transfer, error)
 }
 
 type transferBiz struct {
 	db           *gorm.DB
 	transferRepo repositories.TransferRepository
+	walletRepo repositories.WalletRepository
 	tokenService services.TokenService
 	hub          *ws.Hub
 	sm           *fsm.StateMachine
 }
 
-func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, ts services.TokenService, hub *ws.Hub, sm *fsm.StateMachine) TransferBiz {
+func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr repositories.WalletRepository, ts services.TokenService, hub *ws.Hub, sm *fsm.StateMachine) TransferBiz {
 	return &transferBiz{
 		db:           db,
 		transferRepo: tr,
+		walletRepo: wr,
 		tokenService: ts,
 		hub:          hub,
 		sm:           sm,
 	}
 }
 
-func (b *transferBiz) InitiateTransfer(ctx context.Context, senderID string, toAddress string, amount float64) (*models.Transfer, error) {
-	senderUUID := uuid.Must(uuid.Parse(senderID))
+func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, fromAddress string, toAddress string, amount float64) (*models.Transfer, error) {
+	// 1. Check if wallet existed
+	fromWallet, err := b.walletRepo.FindByAddress(ctx, fromAddress)
+	if err != nil || fromWallet == nil {
+		return nil, err
+	}
 
 	transfer := &models.Transfer{
-		SenderAccountID:  senderUUID,
+		SenderAccountID:  fromWallet.AccountID,
 		ToAddress: toAddress,
 		Amount:    amount,
 		Status:    models.TransferStatePending,
 	}
 
 	// 开启事务进行落库并流转状态
-	err := database.RunInTx(b.db, ctx, func(txCtx context.Context) error {
+	err = database.RunInTx(b.db, ctx, func(txCtx context.Context) error {
 		if _, err := b.transferRepo.Create(txCtx, transfer); err != nil {
 			return err
 		}
@@ -65,17 +71,17 @@ func (b *transferBiz) InitiateTransfer(ctx context.Context, senderID string, toA
 	}
 
 	// 异步执行 Web3 链上转账
-	go b.executeWeb3Transfer(transfer.ID.String(), senderID, toAddress, amount)
+	go b.executeWeb3Transfer(transfer.ID.String(), userID, fromAddress, toAddress, amount)
 
 	return transfer, nil
 }
 
-func (b *transferBiz) executeWeb3Transfer(transferID, senderID, toAddress string, amount float64) {
+func (b *transferBiz) executeWeb3Transfer(transferID, senderID, fromAddress, toAddress string, amount float64) {
 	ctx := context.Background()
 	tUUID := uuid.Must(uuid.Parse(transferID))
 
 	// 1. 纯 Web3 链上调用 (脱离数据库事务)
-	txHash, err := b.tokenService.TransferToAddress(ctx, senderID, toAddress, amount)
+	txHash, err := b.tokenService.TransferToAddress(ctx, fromAddress, toAddress, amount)
 
 	// 2. 使用悲观锁更新数据库状态
 	_ = database.RunInTx(b.db, ctx, func(txCtx context.Context) error {

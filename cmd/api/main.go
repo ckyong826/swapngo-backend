@@ -61,13 +61,16 @@ func main() {
 	accountRepo := repositories.NewAccountRepository(db)
 	walletRepo := repositories.NewWalletRepository(db)
 	depositRepo := repositories.NewDepositRepository(db)
+	withdrawRepo := repositories.NewWithdrawRepository(db)
+	transferRepo := repositories.NewTransferRepository(db)
+	swapRepo := repositories.NewSwapRepository(db)
 
 	// 3. Initialize Clients
 	walletClient := clients.NewWalletClient()
 	hub := ws.NewHub()
 	clients.StartPriceWorker()
 	
-	suiClient := chains.NewSuiClient("https://fullnode.testnet.sui.io:443")
+	suiClient := chains.NewSuiClient(config.Env.SUIChainURL)
 	paymentClient := clients.NewBillplzClient(
 		getenv("BILLPLZ_API_URL", "https://www.billplz-sandbox.com/api/v3"),
 		getenv("BILLPLZ_API_KEY", ""),
@@ -77,7 +80,7 @@ func main() {
 	userService := services.NewUserService(userRepo)
 	accountService := services.NewAccountService(accountRepo)
 	walletService := services.NewWalletService(walletRepo, walletClient)
-	tokenService := services.NewTokenService(walletRepo, suiClient)
+	tokenService := services.NewTokenService(walletRepo, accountRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
 	// 5. Initialize Biz
@@ -85,18 +88,28 @@ func main() {
 	priceBiz := bizs.NewPriceBiz(hub)
 	depositFsm := fsm.BuildDepositFSM()
 	depositBiz := bizs.NewDepositBiz(db, depositRepo, tokenService, accountRepo, hub, depositFsm, paymentClient, depositService)
+	withdrawFsm := fsm.BuildWithdrawFSM()
+	withdrawBiz := bizs.NewWithdrawBiz(db, withdrawRepo,accountRepo, tokenService,walletService,paymentClient, hub, withdrawFsm)
+	transferFsm := fsm.BuildTransferFSM()
+	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, tokenService, hub, transferFsm)
+	swapFsm := fsm.BuildSwapFSM()
+	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, tokenService, hub, swapFsm)
+	
 
 	// 6. Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authBiz)
 	priceHandler := handlers.NewPriceHandler(priceBiz, hub)
 	walletHandler := handlers.NewWalletHandler(walletService)
 	depositHandler := handlers.NewDepositHandler(depositBiz)
+	withdrawHandler := handlers.NewWithdrawHandler(withdrawBiz)
+	transferHandler := handlers.NewTransferHandler(transferBiz)
+	swapHandler := handlers.NewSwapHandler(swapBiz)
 
 	// 7. Setup Router
 	router := gin.Default()
 	
 	// Register all routes
-	routes.SetupRouter(router, authHandler, priceHandler, walletHandler, depositHandler)
+	routes.SetupRouter(router, authHandler, priceHandler, walletHandler, depositHandler, transferHandler, withdrawHandler, swapHandler)
 
 	// 8. Start server
 	log.Println("Server is starting on port 8080...")

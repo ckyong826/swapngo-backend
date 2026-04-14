@@ -11,26 +11,26 @@ import (
 )
 
 type WithdrawService interface {
-	CreatePendingWithdrawal(ctx context.Context,req *withdrawalReq.WithdrawalRequest, accountID uuid.UUID, gatewayRefID string) (*models.Withdrawal, error)
+	CreatePendingWithdrawal(ctx context.Context,req *withdrawalReq.InitiateWithdrawReq, accountID uuid.UUID, gatewayRefID string) (*models.Withdrawal, error)
 }
 
 type withdrawService struct {
 	repo repositories.WithdrawRepository
 }
 
-func NewWithdrawalService(repo repositories.WithdrawRepository) WithdrawService {
+func NewWithdrawService(repo repositories.WithdrawRepository) WithdrawService {
 	return &withdrawService{repo: repo}
 }
 
-func (s *withdrawService) CreatePendingWithdrawal(ctx context.Context,req *withdrawalReq.WithdrawalRequest, accountID uuid.UUID,  gatewayRefID string) (*models.Withdrawal, error) {
+func (s *withdrawService) CreatePendingWithdrawal(ctx context.Context,req *withdrawalReq.InitiateWithdrawReq, accountID uuid.UUID,  gatewayRefID string) (*models.Withdrawal, error) {
 	withdrawal := &models.Withdrawal{
 		AccountID:    accountID,
 		AmountMYR:    req.AmountMYRC,
 		AmountMYRC:   req.AmountMYRC,
-		Status:       models.WithdrawStatePending,
-		GatewayRefID: gatewayRefID,
 		BankName:     req.BankName,
 		BankAccountNo: req.BankAccountNo,
+		Status:       models.WithdrawStatePending,
+		GatewayRefID: gatewayRefID,
 	}
 
 	_, err := s.repo.Create(ctx, withdrawal)

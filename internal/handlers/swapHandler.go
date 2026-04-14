@@ -2,30 +2,28 @@ package handlers
 
 import (
 	"swapngo-backend/internal/bizs"
+	swap "swapngo-backend/pkg/requests/swap"
 
 	"github.com/gin-gonic/gin"
 )
 
-type SwapHandler struct {
+type SwapHandler interface {
+	InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapReq) (any, error)
+}
+
+type swapHandler struct {
 	swapBiz bizs.SwapBiz
 }
 
-func NewSwapHandler(sb bizs.SwapBiz) *SwapHandler {
-	return &SwapHandler{swapBiz: sb}
+func NewSwapHandler(sb bizs.SwapBiz) SwapHandler {
+	return &swapHandler{swapBiz: sb}
 }
 
 // 定义请求体
-type InitiateSwapReq struct {
-	FromToken       string  `json:"from_token" binding:"required"`
-	ToToken         string  `json:"to_token" binding:"required"`
-	FromAmount      float64 `json:"from_amount" binding:"required,gt=0"`
-	EstimatedAmount float64 `json:"estimated_amount" binding:"required,gt=0"`
-	Slippage        float64 `json:"slippage" binding:"required,gte=0,lte=0.5"` // 最高容忍 50% 滑点
-}
 
 // InitiateExecute 供 App 调用
-func (h *SwapHandler) InitiateExecute(ctx *gin.Context, req *InitiateSwapReq) (any, error) {
-	userID := ctx.GetString("userID")
+func (h *swapHandler) InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapReq) (any, error) {
+	userID := ctx.GetString("user_id")
 	
 	swap, err := h.swapBiz.InitiateSwap(
 		ctx.Request.Context(),

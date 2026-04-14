@@ -70,14 +70,9 @@ func (s *tokenService) TransferToTreasury(ctx context.Context, accountID string,
 	return txHash, nil
 }
 
-func (s *tokenService) TransferToAddress(ctx context.Context, senderUserID string, toAddress string, amount float64) (string, error) {
+func (s *tokenService) TransferToAddress(ctx context.Context, fromAddress string, toAddress string, amount float64) (string, error) {
 	// 1. 查找发送者的托管钱包
-	account, err := s.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(senderUserID)))
-	if err != nil || account == nil {
-		return "", fmt.Errorf("failed to fetch sender account")
-	}
-	
-	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, account[0].ID, "SUI")
+	wallet, err := s.walletRepo.FindByAddress(ctx, fromAddress)
 	if err != nil || wallet == nil {
 		return "", fmt.Errorf("failed to fetch sender wallet")
 	}

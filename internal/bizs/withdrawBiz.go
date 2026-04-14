@@ -2,6 +2,7 @@ package bizs
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"swapngo-backend/internal/clients"
@@ -25,17 +26,19 @@ type withdrawBiz struct {
 	withdrawRepo   repositories.WithdrawRepository
 	accountRepo    repositories.AccountRepository
 	tokenService   services.TokenService
+	walletService  services.WalletService
 	paymentClient  clients.IPaymentClient
 	hub            *ws.Hub
 	sm             *fsm.StateMachine
 }
 
-func NewWithdrawBiz(db *gorm.DB, wr repositories.WithdrawRepository, ar repositories.AccountRepository, ts services.TokenService, pc clients.IPaymentClient, hub *ws.Hub, sm *fsm.StateMachine) WithdrawBiz {
+func NewWithdrawBiz(db *gorm.DB, wr repositories.WithdrawRepository, ar repositories.AccountRepository, ts services.TokenService, ws services.WalletService, pc clients.IPaymentClient, hub *ws.Hub, sm *fsm.StateMachine) WithdrawBiz {
 	return &withdrawBiz{
 		db:             db,
 		withdrawRepo:   wr,
 		accountRepo:    ar,
 		tokenService:   ts,
+		walletService:  ws,
 		paymentClient:  pc,
 		hub:            hub,
 		sm:             sm,
@@ -48,6 +51,17 @@ func (b *withdrawBiz) InitiateWithdrawal(ctx context.Context, userID string, amo
 	if err != nil || len(accounts) == 0 {
 		log.Printf("CRITICAL: Failed to fetch account for user %s", userID)
 		return nil, err
+	}
+
+	// Check if the account has enough balance
+	hasEnoughBalance, err := b.walletService.CheckBalanceByUserIDAndChain(ctx, userID, models.ChainSui, amountMYRC)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to get balance for user %s", userID)
+		return nil, err
+	}
+	if !hasEnoughBalance {
+		log.Printf("CRITICAL: Insufficient balance for user %s", userID)
+		return nil, errors.New("insufficient balance")
 	}
 
 	// 假设 1 MYRC = 1 MYR
