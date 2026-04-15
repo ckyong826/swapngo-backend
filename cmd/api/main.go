@@ -50,7 +50,7 @@ func main() {
 	}
 
 	// Auto Migrate
-	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{})
+	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{},&models.Withdrawal{},&models.Transfer{},&models.Swap{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -68,7 +68,7 @@ func main() {
 	// 3. Initialize Clients
 	walletClient := clients.NewWalletClient()
 	hub := ws.NewHub()
-	clients.StartPriceWorker()
+	// clients.StartPriceWorker()
 	
 	suiClient := chains.NewSuiClient(config.Env.SUIChainURL)
 	paymentClient := clients.NewBillplzClient(
@@ -79,7 +79,7 @@ func main() {
 	// 4. Initialize Services
 	userService := services.NewUserService(userRepo)
 	accountService := services.NewAccountService(accountRepo)
-	walletService := services.NewWalletService(walletRepo, walletClient)
+	walletService := services.NewWalletService(walletRepo, accountRepo, walletClient)
 	tokenService := services.NewTokenService(walletRepo, accountRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
@@ -91,7 +91,7 @@ func main() {
 	withdrawFsm := fsm.BuildWithdrawFSM()
 	withdrawBiz := bizs.NewWithdrawBiz(db, withdrawRepo,accountRepo, tokenService,walletService,paymentClient, hub, withdrawFsm)
 	transferFsm := fsm.BuildTransferFSM()
-	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, tokenService, hub, transferFsm)
+	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, accountRepo, tokenService, hub, transferFsm)
 	swapFsm := fsm.BuildSwapFSM()
 	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, tokenService, hub, swapFsm)
 	

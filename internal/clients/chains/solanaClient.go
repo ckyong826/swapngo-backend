@@ -77,3 +77,6 @@ func (c *solanaClient) GetBalance(ctx context.Context, address string) (string, 
 func (c *solanaClient) TransferMYRC(ctx context.Context, fromPrivateKey, fromAddress, toAddress string, amount float64) (string, error) {
 	return "", fmt.Errorf("TransferMYRC not implemented for Solana")
 }
+func (c *solanaClient) TransferCoin(ctx context.Context, fromPrivateKey, fromAddress, toAddress string, amount float64) (string, error) {
+	return "", fmt.Errorf("TransferCoin not implemented for Solana")
+}

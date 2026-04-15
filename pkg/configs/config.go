@@ -20,6 +20,8 @@ type Config struct {
 	SUIPackageID string
 	SUITreasuryCapID string
 	SUITreasuryPriv string
+	SUIAdminPriv string
+	SUIAdminAddress string
 }
 
 // Global instance
@@ -87,6 +89,16 @@ func Load() {
 		log.Fatal("FATAL: SUI_TREASURY_PRIVATE_KEY environment variable is required but missing!")
 	}
 
+	suiAdminPriv := os.Getenv("SUI_ADMIN_PRIVATE_KEY")
+	if suiAdminPriv == "" {
+		log.Fatal("FATAL: SUI_ADMIN_PRIVATE_KEY environment variable is required but missing!")
+	}	
+
+	suiAdminAddress := os.Getenv("SUI_ADMIN_ADDRESS")
+	if suiAdminAddress == "" {
+		log.Fatal("FATAL: SUI_ADMIN_ADDRESS environment variable is required but missing!")
+	}	
+
 	// Populate the global config
 	Env = &Config{
 		JWTSecret:      []byte(secret),
@@ -99,5 +111,7 @@ func Load() {
 		SUIPackageID: suiPackageID,
 		SUITreasuryCapID: suiTreasuryCapID,
 		SUITreasuryPriv: suiTreasuryPriv,
+		SUIAdminPriv: suiAdminPriv,
+		SUIAdminAddress: suiAdminAddress,
 	}
 }

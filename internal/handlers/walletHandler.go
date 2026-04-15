@@ -8,7 +8,7 @@ import (
 
 type WalletHandler interface {
 	GetTotalBalanceByUserID(ctx *gin.Context, req *any) (any, error)
-	
+	GetMYRCBalanceByUserID(ctx *gin.Context, req *any) (any, error)
 }
 
 type walletHandler struct {
@@ -26,4 +26,13 @@ func (h *walletHandler) GetTotalBalanceByUserID(ctx *gin.Context, req *any) (any
 		return nil, err
 	}
 	return walletResponse, nil
+}
+
+func (h *walletHandler) GetMYRCBalanceByUserID(ctx *gin.Context, req *any) (any, error) {
+	userID := ctx.GetString("user_id")
+	balance, err := h.walletService.GetMYRCBalanceByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return balance, nil
 }

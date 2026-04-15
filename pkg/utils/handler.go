@@ -16,7 +16,14 @@ func Handle[T any](
 		var req T
 
 		// 1. ParamCheck
-		if err := c.ShouldBindJSON(&req); err != nil {
+		var err error
+		if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodDelete {
+			err = c.ShouldBindQuery(&req) 
+		} else {
+			err = c.ShouldBindJSON(&req)
+		}
+
+		if err != nil && err.Error() != "EOF" { // 允许 GET 请求完全没有参数
 			c.JSON(http.StatusBadRequest, responses.APIResponse{Success: false, Error: "Invalid parameters: " + err.Error()})
 			return
 		}

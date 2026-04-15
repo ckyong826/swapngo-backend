@@ -13,6 +13,7 @@ func WalletRoutes(router *gin.RouterGroup, walletHandler handlers.WalletHandler)
 	privateWallet := router.Group("/private/wallet")
 	privateWallet.Use(middlewares.AuthMiddleware())
 	{
-		privateWallet.GET("/get-balance", utils.Handle[any]("Successfully registered", walletHandler.GetTotalBalanceByUserID))
+		privateWallet.GET("/get-wallet", utils.Handle[any]("Successfully get the wallet info", walletHandler.GetTotalBalanceByUserID))
+		privateWallet.GET("/get-myrc-balance", utils.Handle[any]("Successfully get the myrc sui balance", walletHandler.GetMYRCBalanceByUserID))
 	}
 }

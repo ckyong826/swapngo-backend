@@ -52,7 +52,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 5. 将解析出的 userID 注入上下文
-		c.Set("userID", userID)
+		c.Set("user_id", userID)
 		
 		c.Next()
 	}

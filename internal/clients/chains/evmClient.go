@@ -66,3 +66,6 @@ func (c *evmClient) GetBalance(ctx context.Context, address string) (string, err
 func (c *evmClient) TransferMYRC(ctx context.Context, fromPrivateKey, fromAddress, toAddress string, amount float64) (string, error) {
 	return "", fmt.Errorf("TransferMYRC not implemented for EVM")
 }
+func (c *evmClient) TransferCoin(ctx context.Context, fromPrivateKey, fromAddress, toAddress string, amount float64) (string, error) {
+	return "", fmt.Errorf("TransferCoin not implemented for Evm")
+}

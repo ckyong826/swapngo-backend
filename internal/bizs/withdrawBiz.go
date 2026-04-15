@@ -104,10 +104,17 @@ func (b *withdrawBiz) executeWithdrawWorkflow(withdrawID, userID string, amountM
 	ctx := context.Background()
 	wUUID := uuid.Must(uuid.Parse(withdrawID))
 
+	// Check if withdraw oder existed
+	withdrawal, err := b.withdrawRepo.FindByID(ctx, wUUID)
+	if err != nil || withdrawal == nil {
+		log.Printf("Web3 Deduction failed for withdrawal not found %s: %v", withdrawID, err)
+		return
+	}
+
 	// ==========================================
 	// 步骤 A: 扣除 Web3 资产 (转移到平台国库 Treasury)
 	// ==========================================
-	txHash, err := b.tokenService.TransferToTreasury(ctx, userID, amountMYRC)
+	txHash, err := b.tokenService.TransferToTreasury(ctx, withdrawal.AccountID.String(), amountMYRC)
 	
 	// 获取锁更新数据库
 	var shouldProceedToFiat bool

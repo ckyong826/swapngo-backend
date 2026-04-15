@@ -146,5 +146,43 @@ func (c *suiClient) GetBalance(ctx context.Context, address string) (string, err
 		return "0", fmt.Errorf("failed to parse balance: %w", err)
 	}
 
-	return strconv.FormatFloat(totalCoinsRaw / 1_000_000_000_000_000.0, 'f', -1, 64), nil
+	return strconv.FormatFloat(totalCoinsRaw / 1_000_000.0, 'f', -1, 64), nil
+}
+
+func (c *suiClient) TransferCoin(ctx context.Context, fromPrivateKey, fromAddress, toAddress string, amountSUI float64) (string, error) {
+	// SUI has 9 decimals (1 SUI = 1_000_000_000 MIST)
+	amountMist := uint64(amountSUI * 1_000_000_000)
+
+	privData, err := base64.StdEncoding.DecodeString(fromPrivateKey)
+	if err != nil || len(privData) != 33 {
+		return "", fmt.Errorf("invalid private key format or length")
+	}
+
+	seed := privData[1:]
+	ed25519PrivKey := ed25519.NewKeyFromSeed(seed)
+
+	// Build transfer of native SUI coin
+	req := models.TransferSuiRequest{
+		Signer:    fromAddress,
+		Recipient: toAddress,
+		Amount:    strconv.FormatUint(amountMist, 10),
+		GasBudget: "10000000",
+	}
+
+	txMeta, err := c.client.TransferSui(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to build transfer-sui PTB: %w", err)
+	}
+
+	txResult, err := c.client.SignAndExecuteTransactionBlock(ctx, models.SignAndExecuteTransactionBlockRequest{
+		TxnMetaData: txMeta,
+		PriKey:      ed25519PrivKey,
+		Options:     models.SuiTransactionBlockOptions{ShowEffects: true},
+		RequestType: "WaitForLocalExecution",
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to execute transfer-sui: %w", err)
+	}
+
+	return txResult.Digest, nil
 }

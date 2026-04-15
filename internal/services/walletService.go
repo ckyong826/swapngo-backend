@@ -16,6 +16,7 @@ type WalletService interface {
 	GenerateWalletsForAccount(ctx context.Context, accountId uuid.UUID) error
 	GetTotalBalanceByUserID(ctx context.Context, userID string) ([]wallet.WalletResponse, error)
 	CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error)
+	GetMYRCBalanceByUserID(ctx context.Context, userID string) (string, error)
 }
 
 type walletService struct {
@@ -24,9 +25,10 @@ type walletService struct {
 	walletClient clients.WalletClient
 }
 
-func NewWalletService(repo repositories.WalletRepository, client clients.WalletClient) WalletService {
+func NewWalletService(repo repositories.WalletRepository,ar repositories.AccountRepository, client clients.WalletClient) WalletService {
 	return &walletService{
 		walletRepo:   repo,
+		accountRepo: ar,
 		walletClient: client,
 	}
 }
@@ -103,28 +105,45 @@ func (s *walletService) GetTotalBalanceByUserID(ctx context.Context, userID stri
 }
 
 func (s *walletService) CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error) {
-	accounts, err := s.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	balanceStr, err := s.GetMYRCBalanceByUserID(ctx, userID)
 	if err != nil {
 		return false, err
 	}
+	balance, err := strconv.ParseFloat(balanceStr, 64)
+	if err != nil {
+		return false, errors.New("invalid balance format")
+	}
+	return balance >= amount, nil
+}
+
+func (s *walletService) GetMYRCBalanceByUserID(ctx context.Context, userID string) (string, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+			return "0", errors.New("UserUUID format is wrong")
+	}
+	accounts, err := s.accountRepo.FindByUserID(ctx, userUUID)
+	if err != nil {
+		return "0", err
+	}
 	if len(accounts) == 0 {
-		return false, errors.New("account not found")
+		return "0", errors.New("account not found")
 	}
 
 	// TODO : Temporarily only support one account for one user
 	if len(accounts) > 1 {
-		return false, errors.New("multiple accounts found")
+		return "0", errors.New("multiple accounts found")
 	}
 
-	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(chain))
+	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
 	if err != nil {
-		return false, err
+		return "0", err
 	}
 
 	balance, err := s.walletClient.GetBalance(ctx, wallet.ChainName, wallet.Address)
 	if err != nil {
-		return false, err
+		return "0", err
 	}
 
-	return balance < strconv.FormatFloat(amount, 'f', 6, 64), nil
+	return balance,nil
 }
+	
