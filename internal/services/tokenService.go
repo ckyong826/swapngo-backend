@@ -142,6 +142,8 @@ func (s *tokenService) ExecuteSwap(ctx context.Context, swapID string) error {
 }
 
 func (s *tokenService) ExecuteSwapPayout(ctx context.Context, userAddress, fromToken, toToken, txDigest string, amountPaid, expectedAmount float64) (string, error) {
+	// Verify against treasury address (where ExecuteSwap sent the user's tokens)
+	treasuryAddress := config.Env.SUITreasuryAddress
 	adminAddress := config.Env.SUIAdminAddress
 	adminPriv := config.Env.SUIAdminPriv
 
@@ -149,9 +151,9 @@ func (s *tokenService) ExecuteSwapPayout(ctx context.Context, userAddress, fromT
 	var err error
 
 	if fromToken == "SUI" && toToken == "MYRC" {
-		isValid, err = s.suiClient.VerifyTransfer(ctx, txDigest, adminAddress, amountPaid)
+		isValid, err = s.suiClient.VerifyTransfer(ctx, txDigest, treasuryAddress, amountPaid)
 	} else if fromToken == "MYRC" && toToken == "SUI" {
-		isValid, err = s.suiClient.VerifyMYRCTransfer(ctx, txDigest, adminAddress, amountPaid)
+		isValid, err = s.suiClient.VerifyMYRCTransfer(ctx, txDigest, treasuryAddress, amountPaid)
 	} else {
 		return "", fmt.Errorf("unsupported token pair: %s to %s", fromToken, toToken)
 	}

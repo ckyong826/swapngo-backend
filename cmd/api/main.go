@@ -9,6 +9,7 @@ import (
 	"swapngo-backend/internal/clients/chains"
 	"swapngo-backend/internal/fsm"
 	"swapngo-backend/internal/handlers"
+	"swapngo-backend/internal/kafka"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/routes"
@@ -36,6 +37,9 @@ func main() {
 
 	// Load config
 	config.Load()
+
+	// Initialize Kafka producer early so publish errors surface at startup
+	kafka.InitProducer()
 
 	// 1. Initialize Database
 	db, err := database.InitDB(

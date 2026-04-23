@@ -60,26 +60,31 @@ services:
       - kafka
       - kafka-init
     command: ["./api"]
+    env_file:
+      - .env
     environment:
-      # 🌟 IMPORTANT: Change localhost to the container names!
+      # Override .env values with Docker-network container names
       DB_HOST: postgres
       DB_PORT: 5432
-      KAFKA_BROKERS: kafka:29092 
+      KAFKA_BROKERS: kafka:29092
     restart: always
 
   # --- New Worker Service ---
   worker:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     # Overriding the command to run the worker instead of the API
-    command: ["./worker"] 
+    command: ["./worker"]
     container_name: swapngo_worker
     depends_on:
       - postgres
       - kafka
       - kafka-init
+    env_file:
+      - .env
     environment:
+      # Override .env values with Docker-network container names
       DB_HOST: postgres
       DB_PORT: 5432
       KAFKA_BROKERS: kafka:29092

@@ -184,10 +184,10 @@ func (b *depositBiz) ProcessDepositEvent(ctx context.Context, depositID uuid.UUI
 		return fmt.Errorf("failed to update deposit to success: %w", updateErr)
 	}
 
-	// 4. Notify Frontend
-	user, err := b.accountRepo.FindByID(ctx, uuid.Must(uuid.Parse(accountID)))
-	if err == nil {
-		b.hub.SendToUser(user.ID.String(), map[string]any{
+	// 4. Notify Frontend (hub is keyed by user ID, not account ID)
+	account, accErr := b.accountRepo.FindByID(ctx, uuid.Must(uuid.Parse(accountID)))
+	if accErr == nil && account != nil {
+		b.hub.SendToUser(account.UserID.String(), map[string]any{
 			"type":    "DEPOSIT_SUCCESS",
 			"amount":  amount,
 			"tx_hash": txHash,

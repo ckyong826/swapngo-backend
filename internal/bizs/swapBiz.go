@@ -142,6 +142,9 @@ func (b *swapBiz) ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userA
 		return fmt.Errorf("db error setting success: %w", err)
 	}
 
-	b.hub.SendToUser(swap.AccountID.String(), map[string]any{"type": "SWAP_COMPLETED", "swap_id": swap.ID})
+	account, accErr := b.accountRepo.FindByID(ctx, swap.AccountID)
+	if accErr == nil && account != nil {
+		b.hub.SendToUser(account.UserID.String(), map[string]any{"type": "SWAP_COMPLETED", "swap_id": swap.ID})
+	}
 	return nil
 }
