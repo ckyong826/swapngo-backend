@@ -2,9 +2,11 @@ package bizs
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"swapngo-backend/internal/fsm"
+	"swapngo-backend/internal/kafka"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/services"
@@ -17,6 +19,9 @@ import (
 
 type TransferBiz interface {
 	InitiateTransfer(ctx context.Context, userID , receiverUserID string, amount float64) (*models.Transfer, error)
+	ProcessTransferEvent(ctx context.Context, transferID uuid.UUID, senderID, fromAddress, toAddress string, amount float64) error
+	ViewTransfer(ctx context.Context, userID, id string) (*models.Transfer, error)
+	ViewAllTransfers(ctx context.Context, userID string) ([]*models.Transfer, error)
 }
 
 type transferBiz struct {
@@ -92,15 +97,30 @@ func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, recei
 		return nil, err
 	}
 
-	// 异步执行 Web3 链上转账
-	go b.executeWeb3Transfer(transfer.ID.String(), userID, fromWallet.Address, toWallet.Address, amount)
+	// Publish Event
+	event := kafka.TransferInitiated{
+		TransferID:  transfer.ID,
+		SenderID:    userID,
+		FromAddress: fromWallet.Address,
+		ToAddress:   toWallet.Address,
+		Amount:      amount,
+	}
+	if pubErr := kafka.PublishTransferInitiatedEvent(ctx, "transfer_events_topic", event); pubErr != nil {
+		log.Printf("Failed to publish transfer event: %v", pubErr)
+		return nil, pubErr
+	}
 
 	return transfer, nil
 }
 
-func (b *transferBiz) executeWeb3Transfer(transferID, senderID, fromAddress, toAddress string, amount float64) {
-	ctx := context.Background()
-	tUUID := uuid.Must(uuid.Parse(transferID))
+func (b *transferBiz) ProcessTransferEvent(ctx context.Context, tUUID uuid.UUID, senderID, fromAddress, toAddress string, amount float64) error {
+	transfer, dbErr := b.transferRepo.FindByID(ctx, tUUID)
+	if dbErr != nil {
+		return fmt.Errorf("CRITICAL: Failed to lock transfer %s: %v", tUUID, dbErr)
+	}
+	if transfer.Status == models.TransferStateSuccess || transfer.Status == models.TransferStateFailed {
+		return nil
+	}
 
 	// 1. 纯 Web3 链上调用 (脱离数据库事务)
 	txHash, err := b.tokenService.TransferToAddress(ctx, fromAddress, toAddress, amount)
@@ -109,17 +129,17 @@ func (b *transferBiz) executeWeb3Transfer(transferID, senderID, fromAddress, toA
 	_ = database.RunInTx(b.db, ctx, func(txCtx context.Context) error {
 		t, dbErr := b.transferRepo.LockById(txCtx, tUUID)
 		if dbErr != nil {
-			log.Printf("CRITICAL: Failed to lock transfer %s: %v", transferID, dbErr)
+			log.Printf("CRITICAL: Failed to lock transfer %s: %v", tUUID, dbErr)
 			return dbErr
 		}
 
 		if err != nil {
-			log.Printf("Transfer %s failed on chain: %v", transferID, err)
+			log.Printf("Transfer %s failed on chain: %v", tUUID, err)
 			t.Status, _ = b.sm.Fire(t.Status, fsm.TransferEventFailed)
 			if _,err := b.transferRepo.Update(txCtx, t); err != nil {
 				return err
 			}
-			return nil
+			return err
 		}
 
 		t.Status, _ = b.sm.Fire(t.Status, fsm.TransferEventSuccess)
@@ -137,10 +157,43 @@ func (b *transferBiz) executeWeb3Transfer(transferID, senderID, fromAddress, toA
 			"amount":  amount,
 			"tx_hash": txHash,
 		})
+		return nil
 	} else {
 		b.hub.SendToUser(senderID, map[string]any{
 			"type":   "TRANSFER_FAILED",
 			"reason": "blockchain error",
 		})
+		return err
 	}
+}
+
+func (b *transferBiz) ViewTransfer(ctx context.Context, userID string, id string) (*models.Transfer, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch user account")
+	}
+	accountID := accounts[0].ID
+
+	transfer, err := b.transferRepo.FirstBy(ctx, "id = ? AND (sender_account_id = ? OR receiver_account_id = ?)", uuid.Must(uuid.Parse(id)), accountID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if transfer == nil {
+		return nil, fmt.Errorf("transfer not found")
+	}
+	return transfer, nil
+}
+
+func (b *transferBiz) ViewAllTransfers(ctx context.Context, userID string) ([]*models.Transfer, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch user account")
+	}
+	accountID := accounts[0].ID
+
+	transfers, err := b.transferRepo.FindBy(ctx, "sender_account_id = ? OR receiver_account_id = ?", accountID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	return transfers, nil
 }

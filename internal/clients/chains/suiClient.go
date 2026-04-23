@@ -126,7 +126,115 @@ func (c *suiClient) TransferMYRC(ctx context.Context, fromPrivateKey string, fro
 	log.Printf("Transferred %f MYRC to %s. TxHash: %s", amount, toAddress, txResult.Digest)
 	return txResult.Digest, nil
 }
+
 // ==========================================
+// 4. VERIFY SUI TRANSFER
+// ==========================================
+func (c *suiClient) VerifyTransfer(ctx context.Context, txDigest string, adminAddress string, minExpected float64) (bool, error) {
+	req := models.SuiGetTransactionBlockRequest{
+		Digest: txDigest,
+		Options: models.SuiTransactionBlockOptions{
+			ShowEffects:        true,
+			ShowBalanceChanges: true,
+		},
+	}
+
+	rsp, err := c.client.SuiGetTransactionBlock(ctx, req)
+	if err != nil {
+		// This likely means the network hasn't seen it yet or an invalid digest.
+		return false, fmt.Errorf("failed to get transaction block: %w", err)
+	}
+
+	// Check if effects were populated by evaluating the Status.
+	if rsp.Effects.Status.Status == "" {
+		return false, fmt.Errorf("transaction effects not available or status is empty")
+	}
+
+	if rsp.Effects.Status.Status != "success" {
+		return false, fmt.Errorf("transaction failed on-chain: %v", rsp.Effects.Status.Error)
+	}
+
+	// SUI has 9 decimals
+	minExpectedMist := int64(minExpected * 1_000_000_000)
+	var totalReceived int64
+
+	for _, bc := range rsp.BalanceChanges {
+		// A positive balance change means they received funds
+		amt, err := strconv.ParseInt(bc.Amount, 10, 64)
+		if err != nil || amt <= 0 {
+			continue
+		}
+
+		// CoinType for native SUI
+		if bc.CoinType == "0x2::sui::SUI" {
+			// Check if the owner matches the admin address
+			// Using strings.Contains since block-vision SDK types for Owner can vary
+			ownerStr := fmt.Sprintf("%v", bc.Owner)
+			if stringContains(ownerStr, adminAddress) {
+				totalReceived += amt
+			}
+		}
+	}
+
+	if totalReceived < minExpectedMist {
+		return false, fmt.Errorf("insufficient funds received by admin. Received: %d, Expected: %d", totalReceived, minExpectedMist)
+	}
+
+	return true, nil
+}
+
+func (c *suiClient) VerifyMYRCTransfer(ctx context.Context, txDigest string, adminAddress string, minExpected float64) (bool, error) {
+	req := models.SuiGetTransactionBlockRequest{
+		Digest: txDigest,
+		Options: models.SuiTransactionBlockOptions{
+			ShowEffects:        true,
+			ShowBalanceChanges: true,
+		},
+	}
+
+	rsp, err := c.client.SuiGetTransactionBlock(ctx, req)
+	if err != nil {
+		return false, fmt.Errorf("failed to get transaction block: %w", err)
+	}
+
+	if rsp.Effects.Status.Status == "" {
+		return false, fmt.Errorf("transaction effects not available or status is empty")
+	}
+
+	if rsp.Effects.Status.Status != "success" {
+		return false, fmt.Errorf("transaction failed on-chain: %v", rsp.Effects.Status.Error)
+	}
+
+	// MYRC has 6 decimals, same logic as TransferMYRC applies
+	minExpectedRaw := int64(minExpected * 1_000_000)
+	var totalReceived int64
+
+	myrcCoinType := fmt.Sprintf("%s::myrc::MYRC", c.packageID)
+
+	for _, bc := range rsp.BalanceChanges {
+		amt, err := strconv.ParseInt(bc.Amount, 10, 64)
+		if err != nil || amt <= 0 {
+			continue
+		}
+
+		if bc.CoinType == myrcCoinType {
+			ownerStr := fmt.Sprintf("%v", bc.Owner)
+			if stringContains(ownerStr, adminAddress) {
+				totalReceived += amt
+			}
+		}
+	}
+
+	if totalReceived < minExpectedRaw {
+		return false, fmt.Errorf("insufficient MYRC funds received by admin. Received: %d, Expected: %d", totalReceived, minExpectedRaw)
+	}
+
+	return true, nil
+}
+
+func stringContains(s, substr string) bool {
+	return len(s) >= len(substr)
+}// ==========================================
 // 3. GET BALANCE
 // ==========================================
 func (c *suiClient) GetBalance(ctx context.Context, address string) (string, error) {
@@ -161,12 +269,30 @@ func (c *suiClient) TransferCoin(ctx context.Context, fromPrivateKey, fromAddres
 	seed := privData[1:]
 	ed25519PrivKey := ed25519.NewKeyFromSeed(seed)
 
+	// Fetch user's SUI coins to get an object ID
+	getCoinsReq := models.SuiXGetCoinsRequest{
+		Owner:    fromAddress, 
+		CoinType: "0x2::sui::SUI",
+	}
+
+	coinsRsp, err := c.client.SuiXGetCoins(ctx, getCoinsReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch SUI coins: %w", err)
+	}
+	if len(coinsRsp.Data) == 0 {
+		return "", fmt.Errorf("insufficient SUI balance: no coins found")
+	}
+
+	// Use the first available coin's ID
+	suiObjectId := coinsRsp.Data[0].CoinObjectId
+
 	// Build transfer of native SUI coin
 	req := models.TransferSuiRequest{
-		Signer:    fromAddress,
-		Recipient: toAddress,
-		Amount:    strconv.FormatUint(amountMist, 10),
-		GasBudget: "10000000",
+		Signer:      fromAddress,
+		SuiObjectId: suiObjectId,
+		Recipient:   toAddress,
+		Amount:      strconv.FormatUint(amountMist, 10),
+		GasBudget:   "10000000",
 	}
 
 	txMeta, err := c.client.TransferSui(ctx, req)

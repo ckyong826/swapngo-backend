@@ -69,3 +69,11 @@ func (c *evmClient) TransferMYRC(ctx context.Context, fromPrivateKey, fromAddres
 func (c *evmClient) TransferCoin(ctx context.Context, fromPrivateKey, fromAddress, toAddress string, amount float64) (string, error) {
 	return "", fmt.Errorf("TransferCoin not implemented for Evm")
 }
+
+func (c *evmClient) VerifyTransfer(ctx context.Context, txDigest string, adminAddress string, minExpected float64) (bool, error) {
+	return false, fmt.Errorf("VerifyTransfer not implemented for Evm")
+}
+
+func (c *evmClient) VerifyMYRCTransfer(ctx context.Context, txDigest string, adminAddress string, minExpected float64) (bool, error) {
+	return false, fmt.Errorf("VerifyMYRCTransfer not implemented for Evm")
+}

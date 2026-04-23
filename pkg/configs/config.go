@@ -22,6 +22,7 @@ type Config struct {
 	SUITreasuryPriv string
 	SUIAdminPriv string
 	SUIAdminAddress string
+	KafkaBrokers string
 }
 
 // Global instance
@@ -99,6 +100,11 @@ func Load() {
 		log.Fatal("FATAL: SUI_ADMIN_ADDRESS environment variable is required but missing!")
 	}	
 
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		kafkaBrokers = "localhost:9092"
+	}
+
 	// Populate the global config
 	Env = &Config{
 		JWTSecret:      []byte(secret),
@@ -113,5 +119,6 @@ func Load() {
 		SUITreasuryPriv: suiTreasuryPriv,
 		SUIAdminPriv: suiAdminPriv,
 		SUIAdminAddress: suiAdminAddress,
+		KafkaBrokers: kafkaBrokers,
 	}
 }

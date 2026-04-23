@@ -80,7 +80,7 @@ func main() {
 	userService := services.NewUserService(userRepo)
 	accountService := services.NewAccountService(accountRepo)
 	walletService := services.NewWalletService(walletRepo, accountRepo, walletClient)
-	tokenService := services.NewTokenService(walletRepo, accountRepo, suiClient)
+	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
 	// 5. Initialize Biz

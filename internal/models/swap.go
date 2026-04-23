@@ -8,8 +8,8 @@ type Swap struct {
 	Base
 
 	AccountID            uuid.UUID `gorm:"type:uuid;not null;index"`
-	FromToken         string    `gorm:"type:varchar(20);not null"` // 例如 "MYRC"
-	ToToken           string    `gorm:"type:varchar(20);not null"` // 例如 "SUI"
+	FromToken         TokenType    `gorm:"type:varchar(20);not null"` // 例如 "MYRC"
+	ToToken           TokenType    `gorm:"type:varchar(20);not null"` // 例如 "SUI"
 	
 	FromAmount        float64   `gorm:"not null"`
 	EstimatedToAmount float64   `gorm:"not null"` // 用户确认兑换时的期望金额
@@ -27,3 +27,10 @@ const(
 	SwapStateFailed     = "FAILED"
 
 )
+
+type TokenType string
+
+const (
+	SUI  TokenType = "SUI"
+	MYRC TokenType = "MYRC"
+)	

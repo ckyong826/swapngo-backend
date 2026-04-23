@@ -9,6 +9,8 @@ import (
 
 type WithdrawHandler interface {
 	WithdrawMYRC(ctx *gin.Context, req *requests.InitiateWithdrawReq) (any, error)
+	ViewWithdraw(ctx *gin.Context, _ *struct{}) (any, error)
+	ViewAllWithdraws(ctx *gin.Context, _ *struct{}) (any, error)
 }
 
 type withdrawHandler struct {
@@ -26,4 +28,15 @@ func (h *withdrawHandler) WithdrawMYRC(ctx *gin.Context, req *requests.InitiateW
 		return nil, err
 	}
 	return walletResponse, nil
+}
+
+func (h *withdrawHandler) ViewWithdraw(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	id := ctx.Param("id")
+	return h.withdrawBiz.ViewWithdraw(ctx.Request.Context(), userID, id)
+}
+
+func (h *withdrawHandler) ViewAllWithdraws(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	return h.withdrawBiz.ViewAllWithdraws(ctx.Request.Context(), userID)
 }

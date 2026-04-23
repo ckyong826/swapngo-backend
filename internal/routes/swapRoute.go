@@ -15,5 +15,7 @@ func SwapRoutes(router *gin.RouterGroup, swapHandler handlers.SwapHandler) {
 	privateSwap.Use(middlewares.AuthMiddleware())
 	{
 		privateSwap.POST("/initiate", utils.Handle[requests.InitiateSwapReq]("Swap initiated successfully", swapHandler.InitiateExecute))
+		privateSwap.GET("/all", utils.Handle[struct{}]("Fetched all swaps successfully", swapHandler.ViewAllSwaps))
+		privateSwap.GET("/:id", utils.Handle[struct{}]("Fetched swap successfully", swapHandler.ViewSwap))
 	}
 }

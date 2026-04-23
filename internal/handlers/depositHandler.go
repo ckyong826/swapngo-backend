@@ -10,6 +10,8 @@ import (
 type DepositHandler interface {
 	DepositMYRC(ctx *gin.Context, req *requests.InitiateDepositReq) (any, error)
 	HandleWebhook(ctx *gin.Context)
+	ViewDeposit(ctx *gin.Context, _ *struct{}) (any, error)
+	ViewAllDeposits(ctx *gin.Context, _ *struct{}) (any, error)
 }
 
 type depositHandler struct {
@@ -43,4 +45,15 @@ func (h *depositHandler) HandleWebhook(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(200, gin.H{"status": "ok"})
+}
+
+func (h *depositHandler) ViewDeposit(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	id := ctx.Param("id")
+	return h.depositBiz.ViewDeposit(ctx.Request.Context(), userID, id)
+}
+
+func (h *depositHandler) ViewAllDeposits(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	return h.depositBiz.ViewAllDeposits(ctx.Request.Context(), userID)
 }

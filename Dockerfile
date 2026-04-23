@@ -14,8 +14,9 @@ RUN go mod download
 COPY . .
 
 # Build the application
-# We build the main.go inside /cmd/api/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main ./cmd/api/main.go
+# We build the main.go inside /cmd/api/ and /cmd/worker/
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/api ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/worker ./cmd/worker/main.go
 
 # Stage 2: Final lightweight image
 FROM alpine:latest
@@ -26,7 +27,8 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root/
 
 # Copy the binary and .env
-COPY --from=builder /app/main .
+COPY --from=builder /app/api .
+COPY --from=builder /app/worker .
 COPY --from=builder /app/.env . 
 
 # 🌟 OPTIONAL: Set the environment variable so the OS defaults to your timezone
@@ -34,4 +36,4 @@ ENV TZ=Asia/Kuala_Lumpur
 
 EXPOSE 8080
 
-CMD ["./main"]
+CMD ["./api"]

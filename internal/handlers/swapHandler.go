@@ -9,6 +9,8 @@ import (
 
 type SwapHandler interface {
 	InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapReq) (any, error)
+	ViewSwap(ctx *gin.Context, _ *struct{}) (any, error)
+	ViewAllSwaps(ctx *gin.Context, _ *struct{}) (any, error)
 }
 
 type swapHandler struct {
@@ -44,4 +46,15 @@ func (h *swapHandler) InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapRe
 		"status":  swap.Status, // PROCESSING
 		"message": "Swap initiated, confirming on blockchain...",
 	}, nil
+}
+
+func (h *swapHandler) ViewSwap(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	id := ctx.Param("id")
+	return h.swapBiz.ViewSwap(ctx.Request.Context(), userID, id)
+}
+
+func (h *swapHandler) ViewAllSwaps(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	return h.swapBiz.ViewAllSwaps(ctx.Request.Context(), userID)
 }

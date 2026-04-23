@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"swapngo-backend/internal/clients/chains"
+	"swapngo-backend/internal/kafka"
 	"swapngo-backend/internal/repositories"
 	config "swapngo-backend/pkg/configs"
 )
@@ -15,18 +16,21 @@ type TokenService interface {
 	MintingMYRCBySUI(ctx context.Context, accountID string, amount float64) (txHash string, err error)
 	TransferToTreasury(ctx context.Context, accountID string, amount float64) (txHash string, err error)
 	TransferToAddress(ctx context.Context, senderUserID string, toAddress string, amount float64) (txHash string, err error)
-	ExecuteSwap(ctx context.Context, userID, fromToken, toToken string, amount, slippage float64) (txHash string, actualAmount float64, err error)
+	ExecuteSwap(ctx context.Context, swapID string) error
+	ExecuteSwapPayout(ctx context.Context, userAddress, fromToken, toToken, txDigest string, amountPaid, expectedAmount float64) (string, error)
 }
 
 type tokenService struct {
 	walletRepo repositories.WalletRepository
+	swapRepo repositories.SwapRepository
 	accountRepo repositories.AccountRepository
 	suiClient  chains.IChainClient
 }
 
-func NewTokenService(wr repositories.WalletRepository, ar repositories.AccountRepository, sc chains.IChainClient) TokenService {
+func NewTokenService(wr repositories.WalletRepository, sr repositories.SwapRepository, ar repositories.AccountRepository, sc chains.IChainClient) TokenService {
 	return &tokenService{
 		walletRepo: wr,
+		swapRepo:   sr,
 		accountRepo: ar,
 		suiClient:  sc,
 	}
@@ -86,25 +90,89 @@ func (s *tokenService) TransferToAddress(ctx context.Context, fromAddress string
 	return txHash, nil
 }
 
-func (s *tokenService) ExecuteSwap(ctx context.Context, userID, fromToken, toToken string, amount, slippage float64) (string, float64, error) {
-	account, err := s.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
-	if err != nil || account == nil {
-		return "", 0, fmt.Errorf("failed to fetch sender account")
+func (s *tokenService) ExecuteSwap(ctx context.Context, swapID string) error {
+	swap, err := s.swapRepo.FindByID(ctx, uuid.Must(uuid.Parse(swapID)))
+	if err != nil || swap == nil {
+		return fmt.Errorf("failed to fetch sender account")
 	}
 	
-	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, account[0].ID, "SUI")
+	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, swap.AccountID, "SUI")
 	if err != nil || wallet == nil {
-		return "", 0, fmt.Errorf("failed to fetch user wallet")
+		return fmt.Errorf("failed to fetch user wallet")
 	}
 
-	// 🔒 生产环境逻辑：
-	// 1. 调用 DEX 聚合器 API (例如 Sui 上的 Hop 或 Cetus) 获取最优路由和 CallData
-	// 2. 组装 PTB (Programmable Transaction Block)
-	// 3. 用 wallet.PrivateKey 签名并广播
+	// 1. Web3 Transfer User token to Treasury
+	treasuryAddr := config.Env.SUITreasuryAddress
+	if treasuryAddr == "" {
+		return fmt.Errorf("CRITICAL: SUI treasury address missing in config")
+	}
 
-	// 模拟链上交互返回 (比如由于滑点，实际获得的数量可能略少于预期)
-	mockTxHash := "0xSuiSwap_" + uuid.New().String()[:8]
-	mockActualAmount := amount * 0.99 // 假设 1:1 兑换但扣除 DEX 1% 的流动性费用
+	var txDigest string
+	var errTx error
 
-	return mockTxHash, mockActualAmount, nil
+	if string(swap.FromToken) == "SUI" {
+		txDigest, errTx = s.suiClient.TransferCoin(ctx, wallet.PrivateKey, wallet.Address, treasuryAddr, swap.FromAmount)
+	} else if string(swap.FromToken) == "MYRC" {
+		txDigest, errTx = s.suiClient.TransferMYRC(ctx, wallet.PrivateKey, wallet.Address, treasuryAddr, swap.FromAmount)
+	} else {
+		return fmt.Errorf("unsupported token to swap from")
+	}
+
+	if errTx != nil {
+		return fmt.Errorf("failed to execute on-chain transfer to treasury: %w", errTx)
+	}
+
+	// --- TRIGGER KAFKA EVENT ---
+	event := kafka.SwapInitiated{
+		OrderID:        swap.ID,
+		UserAddress:    wallet.Address,
+		FromToken:      string(swap.FromToken),
+		ToToken:        string(swap.ToToken),
+		AmountPaid:     swap.FromAmount,
+		ExpectedAmount: swap.EstimatedToAmount,
+		TxDigest:       txDigest,
+	}
+
+	err = kafka.PublishSwapInitiatedEvent(ctx, "swap_events_topic", event)
+	if err != nil {
+		return fmt.Errorf("failed to publish swap event: %w", err)
+	}
+
+	return nil
+}
+
+func (s *tokenService) ExecuteSwapPayout(ctx context.Context, userAddress, fromToken, toToken, txDigest string, amountPaid, expectedAmount float64) (string, error) {
+	adminAddress := config.Env.SUIAdminAddress
+	adminPriv := config.Env.SUIAdminPriv
+
+	var isValid bool
+	var err error
+
+	if fromToken == "SUI" && toToken == "MYRC" {
+		isValid, err = s.suiClient.VerifyTransfer(ctx, txDigest, adminAddress, amountPaid)
+	} else if fromToken == "MYRC" && toToken == "SUI" {
+		isValid, err = s.suiClient.VerifyMYRCTransfer(ctx, txDigest, adminAddress, amountPaid)
+	} else {
+		return "", fmt.Errorf("unsupported token pair: %s to %s", fromToken, toToken)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("on-chain verification failed/pending: %w", err)
+	}
+	if !isValid {
+		return "", fmt.Errorf("transfer verification rejected")
+	}
+
+	var payoutTx string
+	if toToken == "MYRC" {
+		payoutTx, err = s.suiClient.TransferMYRC(ctx, adminPriv, adminAddress, userAddress, expectedAmount)
+	} else if toToken == "SUI" {
+		payoutTx, err = s.suiClient.TransferCoin(ctx, adminPriv, adminAddress, userAddress, expectedAmount)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to execute payout token %s: %w", toToken, err)
+	}
+
+	return payoutTx, nil
 }

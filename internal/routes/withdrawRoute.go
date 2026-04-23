@@ -15,6 +15,8 @@ func WithdrawRoutes(router *gin.RouterGroup, withdrawHandler handlers.WithdrawHa
 	privateWithdraw.Use(middlewares.AuthMiddleware())
 	{
 		privateWithdraw.POST("/initiate", utils.Handle[requests.InitiateWithdrawReq]("Withdraw initiated successfully", withdrawHandler.WithdrawMYRC))
+		privateWithdraw.GET("/all", utils.Handle[struct{}]("Fetched all withdrawals successfully", withdrawHandler.ViewAllWithdraws))
+		privateWithdraw.GET("/:id", utils.Handle[struct{}]("Fetched withdrawal successfully", withdrawHandler.ViewWithdraw))
 	}
 
 }

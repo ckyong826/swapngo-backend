@@ -3,10 +3,12 @@ package bizs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/fsm"
+	"swapngo-backend/internal/kafka"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/services"
@@ -19,6 +21,9 @@ import (
 
 type WithdrawBiz interface {
 	InitiateWithdrawal(ctx context.Context, userID string, amountMYRC float64, bankName, bankAccountNo string) (*models.Withdrawal, error)
+	ProcessWithdrawEvent(ctx context.Context, withdrawID uuid.UUID, userID string, amountMYRC, amountMYR float64, bankName, bankAccountNo string) error
+	ViewWithdraw(ctx context.Context, userID, id string) (*models.Withdrawal, error)
+	ViewAllWithdraws(ctx context.Context, userID string) ([]*models.Withdrawal, error)
 }
 
 type withdrawBiz struct {
@@ -94,21 +99,32 @@ func (b *withdrawBiz) InitiateWithdrawal(ctx context.Context, userID string, amo
 	}
 
 	// Asynchronously execute the withdrawal workflow
-	go b.executeWithdrawWorkflow(withdraw.ID.String(), userID, amountMYRC, amountMYR, bankName, bankAccountNo)
+	event := kafka.WithdrawInitiated{
+		WithdrawID:    withdraw.ID,
+		UserID:        userID,
+		AmountMYRC:    amountMYRC,
+		AmountMYR:     amountMYR,
+		BankName:      bankName,
+		BankAccountNo: bankAccountNo,
+	}
+	if pubErr := kafka.PublishWithdrawInitiatedEvent(ctx, "withdraw_events_topic", event); pubErr != nil {
+		log.Printf("Failed to publish withdraw event: %v", pubErr)
+		return nil, pubErr
+	}
 
 	return withdraw, nil
 }
 
 // 2. 异步处理链：Web3 扣款 + Web2 法币打款
-func (b *withdrawBiz) executeWithdrawWorkflow(withdrawID, userID string, amountMYRC, amountMYR float64, bankName, bankAccountNo string) {
-	ctx := context.Background()
-	wUUID := uuid.Must(uuid.Parse(withdrawID))
-
+func (b *withdrawBiz) ProcessWithdrawEvent(ctx context.Context, wUUID uuid.UUID, userID string, amountMYRC, amountMYR float64, bankName, bankAccountNo string) error {
 	// Check if withdraw oder existed
 	withdrawal, err := b.withdrawRepo.FindByID(ctx, wUUID)
 	if err != nil || withdrawal == nil {
-		log.Printf("Web3 Deduction failed for withdrawal not found %s: %v", withdrawID, err)
-		return
+		return fmt.Errorf("Withdrawal not found %s: %w", wUUID, err)
+	}
+
+	if withdrawal.Status == models.WithdrawStateSuccess || withdrawal.Status == models.WithdrawStateFailed {
+		return nil // gracefully skip idempotency
 	}
 
 	// ==========================================
@@ -122,7 +138,7 @@ func (b *withdrawBiz) executeWithdrawWorkflow(withdrawID, userID string, amountM
 		w, _ := b.withdrawRepo.LockById(txCtx, wUUID)
 		
 		if err != nil {
-			log.Printf("Web3 Deduction failed for withdraw %s: %v", withdrawID, err)
+			log.Printf("Web3 Deduction failed for withdraw %s: %v", wUUID, err)
 			w.Status, _ = b.sm.Fire(w.Status, fsm.WithdrawEventWeb3Failed)
 			if _, err := b.withdrawRepo.Update(txCtx, w); err != nil {
 				return err
@@ -142,7 +158,7 @@ func (b *withdrawBiz) executeWithdrawWorkflow(withdrawID, userID string, amountM
 
 	if !shouldProceedToFiat {
 		b.hub.SendToUser(userID, map[string]any{"type": "WITHDRAW_FAILED", "reason": "blockchain error"})
-		return
+		return fmt.Errorf("web3 process failed: %w", err)
 	}
 
 	// ==========================================
@@ -155,7 +171,7 @@ func (b *withdrawBiz) executeWithdrawWorkflow(withdrawID, userID string, amountM
 		w, _ := b.withdrawRepo.LockById(txCtx, wUUID)
 
 		if payoutErr != nil {
-			log.Printf("CRITICAL: Fiat payout failed for withdraw %s: %v", withdrawID, payoutErr)
+			log.Printf("CRITICAL: Fiat payout failed for withdraw %s: %v", wUUID, payoutErr)
 			w.Status, _ = b.sm.Fire(w.Status, fsm.WithdrawEventFiatFailed)
 			if _, err := b.withdrawRepo.Update(txCtx, w); err != nil {
 				return err
@@ -178,7 +194,40 @@ func (b *withdrawBiz) executeWithdrawWorkflow(withdrawID, userID string, amountM
 			"amount":  amountMYR,
 			"tx_hash": txHash,
 		})
+		return nil
 	} else {
 		b.hub.SendToUser(userID, map[string]any{"type": "WITHDRAW_FAILED", "reason": "bank payout error"})
+		return fmt.Errorf("fiat payout failed: %w", payoutErr)
 	}
+}
+
+func (b *withdrawBiz) ViewWithdraw(ctx context.Context, userID string, id string) (*models.Withdrawal, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch user account")
+	}
+	accountID := accounts[0].ID
+
+	withdraw, err := b.withdrawRepo.FirstBy(ctx, "id = ? AND account_id = ?", uuid.Must(uuid.Parse(id)), accountID)
+	if err != nil {
+		return nil, err
+	}
+	if withdraw == nil {
+		return nil, fmt.Errorf("withdraw not found")
+	}
+	return withdraw, nil
+}
+
+func (b *withdrawBiz) ViewAllWithdraws(ctx context.Context, userID string) ([]*models.Withdrawal, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch user account")
+	}
+	accountID := accounts[0].ID
+
+	withdraws, err := b.withdrawRepo.FindBy(ctx, "account_id = ?", accountID)
+	if err != nil {
+		return nil, err
+	}
+	return withdraws, nil
 }

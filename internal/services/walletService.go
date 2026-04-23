@@ -117,10 +117,7 @@ func (s *walletService) CheckBalanceByUserIDAndChain(ctx context.Context, userID
 }
 
 func (s *walletService) GetMYRCBalanceByUserID(ctx context.Context, userID string) (string, error) {
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-			return "0", errors.New("UserUUID format is wrong")
-	}
+	userUUID := uuid.Must(uuid.Parse(userID))
 	accounts, err := s.accountRepo.FindByUserID(ctx, userUUID)
 	if err != nil {
 		return "0", err

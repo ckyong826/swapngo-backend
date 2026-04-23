@@ -9,6 +9,8 @@ import (
 
 type TransferHandler interface {
 	TransferMYRC(ctx *gin.Context, req *transfer.InitiateTransferReq) (any, error)
+	ViewTransfer(ctx *gin.Context, _ *struct{}) (any, error)
+	ViewAllTransfers(ctx *gin.Context, _ *struct{}) (any, error)
 }
 
 type transferHandler struct {
@@ -26,4 +28,15 @@ func (h *transferHandler) TransferMYRC(ctx *gin.Context, req *transfer.InitiateT
 		return nil, err
 	}
 	return walletResponse, nil
+}
+
+func (h *transferHandler) ViewTransfer(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	id := ctx.Param("id")
+	return h.transferBiz.ViewTransfer(ctx.Request.Context(), userID, id)
+}
+
+func (h *transferHandler) ViewAllTransfers(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	return h.transferBiz.ViewAllTransfers(ctx.Request.Context(), userID)
 }

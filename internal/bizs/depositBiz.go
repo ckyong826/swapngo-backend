@@ -2,11 +2,13 @@ package bizs
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/fsm"
+	"swapngo-backend/internal/kafka"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/services"
@@ -21,6 +23,9 @@ import (
 type DepositBiz interface {
 	InitiateDepositMYRC(ctx context.Context, req *requests.InitiateDepositReq, userID string) (any, error)
 	HandlePaymentWebhook(ctx context.Context, gatewayRefID string, isPaid bool) error
+	ProcessDepositEvent(ctx context.Context, depositID uuid.UUID, accountID string, amount float64) error
+	ViewDeposit(ctx context.Context, userID string, id string) (*models.Deposit, error)
+	ViewAllDeposits(ctx context.Context, userID string) ([]*models.Deposit, error)
 }
 
 type depositBiz struct {
@@ -135,56 +140,89 @@ func (b *depositBiz) HandlePaymentWebhook(ctx context.Context, gatewayRefID stri
 
 	// 2. Async Web3 Block (Out of DB Transaction)
 	if shouldTriggerWeb3 {
-		go b.executeWeb3Workflow(depositID, accountID, amountMYRC)
+		event := kafka.DepositWeb3Initiated{
+			DepositID: uuid.Must(uuid.Parse(depositID)),
+			AccountID: accountID,
+			Amount:    amountMYRC,
+		}
+		if pubErr := kafka.PublishDepositWeb3InitiatedEvent(ctx, "deposit_events_topic", event); pubErr != nil {
+			log.Printf("Failed to publish Web3 deposit event: %v", pubErr)
+			return pubErr
+		}
 	}
 
 	return nil
 }
 
 // Asynchronous minting and update DB
-func (b *depositBiz) executeWeb3Workflow(depositID, accountID string, amount float64) {
-	// Create a background context since this outlives the HTTP request
-	ctx := context.Background()
-
+func (b *depositBiz) ProcessDepositEvent(ctx context.Context, depositID uuid.UUID, accountID string, amount float64) error {
 	// 1. Delegate to TokenService (Pure Web3 logic)
 	txHash, err := b.tokenService.MintingMYRCBySUI(ctx, accountID, amount)
 	
-	// 2. Fetch the deposit again (outside the webhook transaction)
-	deposit, dbErr := b.depositRepo.FindByID(ctx, uuid.Must(uuid.Parse(depositID)))
+	// 2. Fetch the deposit again
+	deposit, dbErr := b.depositRepo.FindByID(ctx, depositID)
 	if dbErr != nil {
-		log.Printf("CRITICAL: Failed to fetch deposit %s after Web3 processing", depositID)
-		return
+		return fmt.Errorf("CRITICAL: Failed to fetch deposit %s after Web3 processing", depositID)
+	}
+	if deposit.Status == models.DepositStateSuccess || deposit.Status == models.DepositStateFailed {
+		return nil // gracefully skip idempotency
 	}
 
 	// 3. Handle Web3 Result & Update DB
-	// 3.1. If Web3 processing failed
 	if err != nil {
 		log.Printf("Web3 processing failed for deposit %s: %v", depositID, err)
 		deposit.Status, _ = b.sm.Fire(deposit.Status, fsm.DepositEventWeb3Failed)
-		_,err = b.depositRepo.Update(ctx, deposit)
-		if err != nil {
-			log.Printf("Failed to update deposit %s status to failed: %v", depositID, err)
+		if _, updateErr := b.depositRepo.Update(ctx, deposit); updateErr != nil {
+			return fmt.Errorf("failed to update deposit to failed: %w", updateErr)
 		}
-		return
+		return err
 	}
 
-	// 3.2. If Web3 processing success
 	deposit.Status, _ = b.sm.Fire(deposit.Status, fsm.DepositEventWeb3Success)
 	deposit.TxHash = txHash
-	_,err = b.depositRepo.Update(ctx, deposit)
-	if err != nil {
-		log.Printf("Failed to update deposit %s status to success: %v", depositID, err)
+	if _, updateErr := b.depositRepo.Update(ctx, deposit); updateErr != nil {
+		return fmt.Errorf("failed to update deposit to success: %w", updateErr)
 	}
 
 	// 4. Notify Frontend
 	user, err := b.accountRepo.FindByID(ctx, uuid.Must(uuid.Parse(accountID)))
-	if err != nil {
-		log.Printf("CRITICAL: Failed to fetch account %s after Web3 processing", accountID)
-		return
+	if err == nil {
+		b.hub.SendToUser(user.ID.String(), map[string]any{
+			"type":    "DEPOSIT_SUCCESS",
+			"amount":  amount,
+			"tx_hash": txHash,
+		})
 	}
-	b.hub.SendToUser(user.ID.String(), map[string]any{
-		"type":    "DEPOSIT_SUCCESS",
-		"amount":  amount,
-		"tx_hash": txHash,
-	})
+	return nil
+}
+
+func (b *depositBiz) ViewDeposit(ctx context.Context, userID string, id string) (*models.Deposit, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch user account")
+	}
+	accountID := accounts[0].ID
+
+	deposit, err := b.depositRepo.FirstBy(ctx, "id = ? AND account_id = ?", uuid.Must(uuid.Parse(id)), accountID)
+	if err != nil {
+		return nil, err
+	}
+	if deposit == nil {
+		return nil, fmt.Errorf("deposit not found")
+	}
+	return deposit, nil
+}
+
+func (b *depositBiz) ViewAllDeposits(ctx context.Context, userID string) ([]*models.Deposit, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch user account")
+	}
+	accountID := accounts[0].ID
+
+	deposits, err := b.depositRepo.FindBy(ctx, "account_id = ?", accountID)
+	if err != nil {
+		return nil, err
+	}
+	return deposits, nil
 }

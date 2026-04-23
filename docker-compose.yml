@@ -30,6 +30,25 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
 
+  # --- Kafka Topic Initialization ---
+  kafka-init:
+    image: apache/kafka:latest
+    container_name: swapngo_kafka_init
+    depends_on:
+      - kafka
+    # Wait for kafka to be ready, then create the topic
+    command: >
+      bash -c "
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list &&
+      echo 'Creating kafka topics' &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic swap_events_topic --replication-factor 1 --partitions 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic deposit_events_topic --replication-factor 1 --partitions 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic withdraw_events_topic --replication-factor 1 --partitions 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic transfer_events_topic --replication-factor 1 --partitions 1 &&
+      echo 'Successfully created topics:' &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+      "
+
   # --- New Backend Service ---
   backend:
     build: .
@@ -39,11 +58,31 @@ services:
     depends_on:
       - postgres
       - kafka
+      - kafka-init
+    command: ["./api"]
     environment:
       # 🌟 IMPORTANT: Change localhost to the container names!
       DB_HOST: postgres
       DB_PORT: 5432
       KAFKA_BROKERS: kafka:29092 
+    restart: always
+
+  # --- New Worker Service ---
+  worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    # Overriding the command to run the worker instead of the API
+    command: ["./worker"] 
+    container_name: swapngo_worker
+    depends_on:
+      - postgres
+      - kafka
+      - kafka-init
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BROKERS: kafka:29092
     restart: always
 
 volumes:

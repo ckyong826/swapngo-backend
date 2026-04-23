@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"swapngo-backend/internal/services"
+	"swapngo-backend/pkg/constants"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,7 +21,7 @@ func NewWalletHandler(walletService services.WalletService) WalletHandler {
 }
 
 func (h *walletHandler) GetTotalBalanceByUserID(ctx *gin.Context, req *any) (any, error) {
-	userID := ctx.GetString("user_id")
+	userID := ctx.GetString(constants.UserID)
 	walletResponse, err := h.walletService.GetTotalBalanceByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -29,7 +30,7 @@ func (h *walletHandler) GetTotalBalanceByUserID(ctx *gin.Context, req *any) (any
 }
 
 func (h *walletHandler) GetMYRCBalanceByUserID(ctx *gin.Context, req *any) (any, error) {
-	userID := ctx.GetString("user_id")
+	userID := ctx.GetString(constants.UserID)
 	balance, err := h.walletService.GetMYRCBalanceByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
