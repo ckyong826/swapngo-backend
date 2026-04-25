@@ -22,7 +22,8 @@ type Config struct {
 	SUITreasuryPriv string
 	SUIAdminPriv string
 	SUIAdminAddress string
-	KafkaBrokers string
+	KafkaBrokers   string
+	KYCEncryptKey  []byte
 }
 
 // Global instance
@@ -105,6 +106,11 @@ func Load() {
 		kafkaBrokers = "localhost:9092"
 	}
 
+	kycEncryptSecret := os.Getenv("KYC_ENCRYPTION_KEY")
+	if kycEncryptSecret == "" {
+		log.Fatal("FATAL: KYC_ENCRYPTION_KEY environment variable is required but missing!")
+	}
+
 	// Populate the global config
 	Env = &Config{
 		JWTSecret:      []byte(secret),
@@ -119,6 +125,7 @@ func Load() {
 		SUITreasuryPriv: suiTreasuryPriv,
 		SUIAdminPriv: suiAdminPriv,
 		SUIAdminAddress: suiAdminAddress,
-		KafkaBrokers: kafkaBrokers,
+		KafkaBrokers:  kafkaBrokers,
+		KYCEncryptKey: []byte(kycEncryptSecret),
 	}
 }
