@@ -49,6 +49,7 @@ func main() {
 	// 4. Init Repositories and Services
 	walletRepo := repositories.NewWalletRepository(db)
 	accountRepo := repositories.NewAccountRepository(db)
+	userRepo := repositories.NewUserRepository(db)
 	swapRepo := repositories.NewSwapRepository(db)
 	depositRepo := repositories.NewDepositRepository(db)
 	withdrawRepo := repositories.NewWithdrawRepository(db)
@@ -60,7 +61,7 @@ func main() {
 		getenv("BILLPLZ_API_KEY", ""),
 	)
 
-	walletService := services.NewWalletService(walletRepo, accountRepo, walletClient)
+	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient)
 	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 

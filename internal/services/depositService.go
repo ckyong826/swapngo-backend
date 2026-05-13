@@ -9,7 +9,7 @@ import (
 )
 
 type DepositService interface {
-	CreatePendingDeposit(ctx context.Context, accountID uuid.UUID, amountMYR, amountMYRC float64, gatewayRefID string) (*models.Deposit, error)
+	CreatePendingDeposit(ctx context.Context, accountID uuid.UUID, amountMYR, amountMYRC float64, gatewayRefID, paymentURL string) (*models.Deposit, error)
 }
 
 type depositService struct {
@@ -20,13 +20,14 @@ func NewDepositService(repo repositories.DepositRepository) DepositService {
 	return &depositService{repo: repo}
 }
 
-func (s *depositService) CreatePendingDeposit(ctx context.Context, accountID uuid.UUID, amountMYR, amountMYRC float64, gatewayRefID string) (*models.Deposit, error) {
+func (s *depositService) CreatePendingDeposit(ctx context.Context, accountID uuid.UUID, amountMYR, amountMYRC float64, gatewayRefID, paymentURL string) (*models.Deposit, error) {
 	deposit := &models.Deposit{
 		AccountID:    accountID,
 		AmountMYR:    amountMYR,
 		AmountMYRC:   amountMYRC,
 		Status:       models.DepositStatePending,
 		GatewayRefID: gatewayRefID,
+		PaymentURL:   paymentURL,
 	}
 
 	_, err := s.repo.Create(ctx, deposit)

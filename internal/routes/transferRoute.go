@@ -15,7 +15,7 @@ func TransferRoutes(router *gin.RouterGroup, TransferHandler handlers.TransferHa
 	privateTransfer.Use(middlewares.AuthMiddleware())
 	{
 		privateTransfer.POST("/initiate", utils.Handle[requests.InitiateTransferReq]("Transfer initiated successfully", TransferHandler.TransferMYRC))
-		privateTransfer.GET("/all", utils.Handle[struct{}]("Fetched all transfers successfully", TransferHandler.ViewAllTransfers))
+		privateTransfer.GET("", utils.Handle[struct{}]("Fetched all transfers successfully", TransferHandler.ViewAllTransfers))
 		privateTransfer.GET("/:id", utils.Handle[struct{}]("Fetched transfer successfully", TransferHandler.ViewTransfer))
 	}
 

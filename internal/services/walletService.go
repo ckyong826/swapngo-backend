@@ -15,6 +15,7 @@ import (
 type WalletService interface {
 	GenerateWalletsForAccount(ctx context.Context, accountId uuid.UUID) error
 	GetTotalBalanceByUserID(ctx context.Context, userID string) ([]wallet.WalletResponse, error)
+	GetWalletInfo(ctx context.Context, userID string) (wallet.WalletInfoResponse, error)
 	CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error)
 	GetMYRCBalanceByUserID(ctx context.Context, userID string) (string, error)
 }
@@ -22,13 +23,15 @@ type WalletService interface {
 type walletService struct {
 	walletRepo   repositories.WalletRepository
 	accountRepo  repositories.AccountRepository
+	userRepo     repositories.UserRepository
 	walletClient clients.WalletClient
 }
 
-func NewWalletService(repo repositories.WalletRepository,ar repositories.AccountRepository, client clients.WalletClient) WalletService {
+func NewWalletService(repo repositories.WalletRepository, ar repositories.AccountRepository, ur repositories.UserRepository, client clients.WalletClient) WalletService {
 	return &walletService{
 		walletRepo:   repo,
-		accountRepo: ar,
+		accountRepo:  ar,
+		userRepo:     ur,
 		walletClient: client,
 	}
 }
@@ -102,6 +105,37 @@ func (s *walletService) GetTotalBalanceByUserID(ctx context.Context, userID stri
 	}
 
 	return walletResponses, nil
+}
+
+func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (wallet.WalletInfoResponse, error) {
+	userUUID := uuid.Must(uuid.Parse(userID))
+
+	user, err := s.userRepo.FindByID(ctx, userUUID)
+	if err != nil || user == nil {
+		return wallet.WalletInfoResponse{}, errors.New("user not found")
+	}
+
+	accounts, err := s.accountRepo.FindByUserID(ctx, userUUID)
+	if err != nil || len(accounts) == 0 {
+		return wallet.WalletInfoResponse{}, errors.New("account not found")
+	}
+
+	suiWallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
+	if err != nil || suiWallet == nil {
+		return wallet.WalletInfoResponse{}, errors.New("SUI wallet not found")
+	}
+
+	balanceStr, _ := s.walletClient.GetBalance(ctx, suiWallet.ChainName, suiWallet.Address)
+	myrcAmount, _ := strconv.ParseFloat(balanceStr, 64)
+
+	return wallet.WalletInfoResponse{
+		SUIAddress: suiWallet.Address,
+		Email:      user.Email,
+		Balances: []wallet.TokenBalance{
+			{Token: "MYRC", Amount: myrcAmount, ValueMYR: myrcAmount},
+		},
+		TotalValueMYR: myrcAmount,
+	}, nil
 }
 
 func (s *walletService) CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error) {

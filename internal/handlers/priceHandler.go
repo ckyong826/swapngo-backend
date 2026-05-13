@@ -26,16 +26,12 @@ var upgrader = websocket.Upgrader{
 }
 
 func (h *priceHandler) HandleWS(ctx *gin.Context) {
-	// 从中间件获取 userID
 	userID := ctx.GetString("user_id")
-	
+
 	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		return
 	}
 
 	h.hub.Register(userID, conn)
-	
-	// 启动该用户的价格推送协程 (这里可以注入 Biz 层)
-	h.priceBiz.StartPushing(userID)
 }

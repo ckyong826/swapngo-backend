@@ -3,6 +3,7 @@ package handlers
 import (
 	"swapngo-backend/internal/bizs"
 	swap "swapngo-backend/pkg/requests/swap"
+	txRes "swapngo-backend/pkg/responses/transaction"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,38 +24,52 @@ func NewSwapHandler(sb bizs.SwapBiz) SwapHandler {
 
 // 定义请求体
 
-// InitiateExecute 供 App 调用
 func (h *swapHandler) InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapReq) (any, error) {
 	userID := ctx.GetString("user_id")
-	
-	swap, err := h.swapBiz.InitiateSwap(
+
+	estimated := req.EstimatedAmount
+	if estimated == 0 {
+		estimated = req.Amount
+	}
+	slippage := req.Slippage
+	if slippage == 0 {
+		slippage = 0.01
+	}
+
+	s, err := h.swapBiz.InitiateSwap(
 		ctx.Request.Context(),
 		userID,
 		req.FromToken,
 		req.ToToken,
-		req.FromAmount,
-		req.EstimatedAmount,
-		req.Slippage,
+		req.Amount,
+		estimated,
+		slippage,
 	)
-	
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]any{
-		"swap_id": swap.ID.String(),
-		"status":  swap.Status, // PROCESSING
-		"message": "Swap initiated, confirming on blockchain...",
+		"id":     s.ID.String(),
+		"status": "pending",
 	}, nil
 }
 
 func (h *swapHandler) ViewSwap(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
 	id := ctx.Param("id")
-	return h.swapBiz.ViewSwap(ctx.Request.Context(), userID, id)
+	s, err := h.swapBiz.ViewSwap(ctx.Request.Context(), userID, id)
+	if err != nil {
+		return nil, err
+	}
+	return txRes.ToSwapResponse(s), nil
 }
 
 func (h *swapHandler) ViewAllSwaps(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
-	return h.swapBiz.ViewAllSwaps(ctx.Request.Context(), userID)
+	swaps, err := h.swapBiz.ViewAllSwaps(ctx.Request.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	return txRes.ToSwapResponses(swaps), nil
 }

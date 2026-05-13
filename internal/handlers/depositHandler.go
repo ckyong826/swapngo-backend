@@ -3,6 +3,7 @@ package handlers
 import (
 	"swapngo-backend/internal/bizs"
 	requests "swapngo-backend/pkg/requests/deposit"
+	txRes "swapngo-backend/pkg/responses/transaction"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,10 +51,18 @@ func (h *depositHandler) HandleWebhook(ctx *gin.Context) {
 func (h *depositHandler) ViewDeposit(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
 	id := ctx.Param("id")
-	return h.depositBiz.ViewDeposit(ctx.Request.Context(), userID, id)
+	d, err := h.depositBiz.ViewDeposit(ctx.Request.Context(), userID, id)
+	if err != nil {
+		return nil, err
+	}
+	return txRes.ToDepositResponse(d), nil
 }
 
 func (h *depositHandler) ViewAllDeposits(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
-	return h.depositBiz.ViewAllDeposits(ctx.Request.Context(), userID)
+	deposits, err := h.depositBiz.ViewAllDeposits(ctx.Request.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	return txRes.ToDepositResponses(deposits), nil
 }

@@ -2,6 +2,7 @@ package routes
 
 import (
 	"swapngo-backend/internal/handlers"
+	"swapngo-backend/pkg/middlewares"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,6 +29,7 @@ func SetupRouter(engine *gin.Engine,
 	}
 
 	wsGroup := engine.Group("/ws")
+	wsGroup.Use(middlewares.AuthMiddleware())
 	{
 		wsGroup.GET("/prices", priceHandler.HandleWS)
 	}

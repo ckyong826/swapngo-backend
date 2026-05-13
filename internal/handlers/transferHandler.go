@@ -3,6 +3,7 @@ package handlers
 import (
 	"swapngo-backend/internal/bizs"
 	transfer "swapngo-backend/pkg/requests/transfer"
+	txRes "swapngo-backend/pkg/responses/transaction"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,20 +24,31 @@ func NewTransferHandler(transferBiz bizs.TransferBiz) TransferHandler {
 
 func (h *transferHandler) TransferMYRC(ctx *gin.Context, req *transfer.InitiateTransferReq) (any, error) {
 	userID := ctx.GetString("user_id")
-	walletResponse, err := h.transferBiz.InitiateTransfer(ctx.Request.Context(), userID, req.ReceiverUserID, req.Amount)
+	t, err := h.transferBiz.InitiateTransfer(ctx.Request.Context(), userID, req.Recipient, req.Amount)
 	if err != nil {
 		return nil, err
 	}
-	return walletResponse, nil
+	return map[string]any{
+		"id":     t.ID.String(),
+		"status": "pending",
+	}, nil
 }
 
 func (h *transferHandler) ViewTransfer(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
 	id := ctx.Param("id")
-	return h.transferBiz.ViewTransfer(ctx.Request.Context(), userID, id)
+	t, err := h.transferBiz.ViewTransfer(ctx.Request.Context(), userID, id)
+	if err != nil {
+		return nil, err
+	}
+	return txRes.ToTransferResponse(t), nil
 }
 
 func (h *transferHandler) ViewAllTransfers(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
-	return h.transferBiz.ViewAllTransfers(ctx.Request.Context(), userID)
+	transfers, err := h.transferBiz.ViewAllTransfers(ctx.Request.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	return txRes.ToTransferResponses(transfers), nil
 }

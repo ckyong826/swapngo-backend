@@ -36,7 +36,7 @@ func (h *Hub) Unregister(userID string) {
 	}
 }
 
-// BroadcastToUser 推送给特定用户
+// SendToUser pushes a message to a specific user.
 func (h *Hub) SendToUser(userID string, data any) {
 	h.clientsMux.RLock()
 	conn, ok := h.clients[userID]
@@ -44,6 +44,16 @@ func (h *Hub) SendToUser(userID string, data any) {
 
 	if ok {
 		payload, _ := json.Marshal(data)
+		conn.WriteMessage(websocket.TextMessage, payload)
+	}
+}
+
+// BroadcastAll pushes a message to all connected clients.
+func (h *Hub) BroadcastAll(data any) {
+	payload, _ := json.Marshal(data)
+	h.clientsMux.RLock()
+	defer h.clientsMux.RUnlock()
+	for _, conn := range h.clients {
 		conn.WriteMessage(websocket.TextMessage, payload)
 	}
 }

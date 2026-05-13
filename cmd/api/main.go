@@ -74,7 +74,7 @@ func main() {
 	// 3. Initialize Clients
 	walletClient := clients.NewWalletClient()
 	hub := ws.NewHub()
-	// clients.StartPriceWorker()
+	clients.StartPriceWorker()
 	
 	suiClient := chains.NewSuiClient(config.Env.SUIChainURL)
 	paymentClient := clients.NewBillplzClient(
@@ -85,13 +85,14 @@ func main() {
 	// 4. Initialize Services
 	userService := services.NewUserService(userRepo)
 	accountService := services.NewAccountService(accountRepo)
-	walletService := services.NewWalletService(walletRepo, accountRepo, walletClient)
+	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient)
 	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
 	// 5. Initialize Biz
 	authBiz := bizs.NewAuthBiz(db, userService, accountService, walletService)
 	priceBiz := bizs.NewPriceBiz(hub)
+	priceBiz.StartBroadcasting()
 	depositFsm := fsm.BuildDepositFSM()
 	depositBiz := bizs.NewDepositBiz(db, depositRepo, tokenService, accountRepo, hub, depositFsm, paymentClient, depositService)
 	withdrawFsm := fsm.BuildWithdrawFSM()

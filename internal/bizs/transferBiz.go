@@ -18,7 +18,7 @@ import (
 )
 
 type TransferBiz interface {
-	InitiateTransfer(ctx context.Context, userID , receiverUserID string, amount float64) (*models.Transfer, error)
+	InitiateTransfer(ctx context.Context, userID, toAddress string, amount float64) (*models.Transfer, error)
 	ProcessTransferEvent(ctx context.Context, transferID uuid.UUID, senderID, fromAddress, toAddress string, amount float64) error
 	ViewTransfer(ctx context.Context, userID, id string) (*models.Transfer, error)
 	ViewAllTransfers(ctx context.Context, userID string) ([]*models.Transfer, error)
@@ -46,8 +46,8 @@ func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr reposito
 	}
 }
 
-func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, receiverUserID string, amount float64) (*models.Transfer, error) {
-	// 1. Check if wallet existed
+func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, toAddress string, amount float64) (*models.Transfer, error) {
+	// 1. Fetch sender account and wallet
 	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || len(accounts) == 0 {
 		log.Printf("CRITICAL: Failed to fetch account for user %s", userID)
@@ -60,24 +60,11 @@ func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, recei
 		return nil, err
 	}
 
-	receiverAccounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(receiverUserID)))
-	if err != nil || len(accounts) == 0 {
-		log.Printf("CRITICAL: Failed to fetch account for user %s", userID)
-		return nil, err
-	}
-
-	toWallet, err := b.walletRepo.FindByAccountIdAndChain(ctx, receiverAccounts[0].ID, string(models.ChainSui))
-	if err != nil {
-		log.Printf("CRITICAL: Failed to fetch wallet for user %s", receiverUserID)
-		return nil, err
-	}
-
 	transfer := &models.Transfer{
-		SenderAccountID:  accounts[0].ID,
-		ReceiverAccountID: &receiverAccounts[0].ID,
-		ToAddress: toWallet.Address,
-		Amount:    amount,
-		Status:    models.TransferStatePending,
+		SenderAccountID: accounts[0].ID,
+		ToAddress:       toAddress,
+		Amount:          amount,
+		Status:          models.TransferStatePending,
 	}
 
 	// 开启事务进行落库并流转状态
@@ -102,7 +89,7 @@ func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, recei
 		TransferID:  transfer.ID,
 		SenderID:    userID,
 		FromAddress: fromWallet.Address,
-		ToAddress:   toWallet.Address,
+		ToAddress:   toAddress,
 		Amount:      amount,
 	}
 	if pubErr := kafka.PublishTransferInitiatedEvent(ctx, "transfer_events_topic", event); pubErr != nil {

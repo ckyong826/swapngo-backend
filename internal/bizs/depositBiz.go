@@ -69,21 +69,22 @@ func (b *depositBiz) InitiateDepositMYRC(ctx context.Context, req *requests.Init
 	collectionID := os.Getenv("BILLPLZ_COLLECTION_ID")
 
 	// 3. Create Bill via paymentClient
-	billRes, err := b.paymentClient.CreateBill(ctx, email, name, req.Amount, description, callbackURL, collectionID)
+	billRes, err := b.paymentClient.CreateBill(ctx, email, name, req.AmountMYR, description, callbackURL, collectionID)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Create proper deposit using depositService
 	accountID := uuid.Must(uuid.Parse(accounts[0].ID.String()))
-	deposit, err := b.depositService.CreatePendingDeposit(ctx, accountID, req.Amount, req.Amount, billRes.ID)
+	deposit, err := b.depositService.CreatePendingDeposit(ctx, accountID, req.AmountMYR, req.AmountMYR, billRes.ID, billRes.URL)
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]any{
-		"deposit_id":  deposit.ID,
-		"payment_url": billRes.URL,
+		"id":                  deposit.ID.String(),
+		"status":              "pending",
+		"billplz_payment_url": billRes.URL,
 	}, nil
 }
 

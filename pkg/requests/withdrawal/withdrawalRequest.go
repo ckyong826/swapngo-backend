@@ -1,7 +1,14 @@
 package withdrawal
 
+type DestinationDetails struct {
+	BankAccount string `json:"bank_account"`
+	BankName    string `json:"bank_name"`
+	SUIAddress  string `json:"sui_address"`
+}
+
 type InitiateWithdrawReq struct {
-	AmountMYRC float64 `json:"amount_myrc" binding:"required,gt=0"`
-	BankName   string  `json:"bank_name" binding:"required"`
-	BankAccountNo string  `json:"bank_account_no" binding:"required"`
+	DestinationType    string             `json:"destination_type" binding:"required,oneof=bank sui_wallet"`
+	DestinationDetails DestinationDetails `json:"destination_details" binding:"required"`
+	Token              string             `json:"token" binding:"required"`
+	Amount             float64            `json:"amount" binding:"required,gt=0"`
 }

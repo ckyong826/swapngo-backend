@@ -18,8 +18,7 @@ var (
 )
 
 func StartPriceWorker() {
-	// 订阅 ETH, SOL, SUI 的实时价格流
-	url := "wss://stream.binance.com:9443/ws/ethusdt@ticker/solusdt@ticker/suiusdt@ticker"
+	url := "wss://stream.binance.com:9443/ws/ethusdt@ticker/solusdt@ticker/suiusdt@ticker/btcusdt@ticker"
 
 	// USD -> MYR 汇率轮询
 	go startUSDToMYRWorker()

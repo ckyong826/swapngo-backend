@@ -1,49 +1,56 @@
 package bizs
 
 import (
+	"strconv"
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/ws"
 	"time"
 )
 
 type PriceBiz interface {
-	StartPushing(userID string)
+	StartBroadcasting()
 }
 
 type priceBiz struct {
-	hub *ws.Hub
+	hub     *ws.Hub
+	started bool
 }
 
 func NewPriceBiz(hub *ws.Hub) PriceBiz {
 	return &priceBiz{hub: hub}
 }
 
-func (b *priceBiz) StartPushing(userID string) {
-	ticker := time.NewTicker(2 * time.Second)
+func parsePrice(s string) float64 {
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
 
+func (b *priceBiz) StartBroadcasting() {
+	if b.started {
+		return
+	}
+	b.started = true
+
+	ticker := time.NewTicker(3 * time.Second)
 	go func() {
 		for range ticker.C {
-			// 1. 获取币安真实价格
 			clients.PriceMux.RLock()
-			ethPrice := clients.LatestPrices["ETHUSDT"]
-			suiPrice := clients.LatestPrices["SUIUSDT"]
-			solPrice := clients.LatestPrices["SOLUSDT"]
-			usdMyrRate := clients.LatestPrices["USDMYR"]
+			ethUSD := parsePrice(clients.LatestPrices["ETHUSDT"])
+			suiUSD := parsePrice(clients.LatestPrices["SUIUSDT"])
+			btcUSD := parsePrice(clients.LatestPrices["BTCUSDT"])
+			usdMyr := parsePrice(clients.LatestPrices["USDMYR"])
 			clients.PriceMux.RUnlock()
 
-			// 2. 构造推送负载
-			pushData := map[string]any{
-				"prices": map[string]any{
-					"ETH":  ethPrice,
-					"SUI":  suiPrice,
-					"SOL":  solPrice,
-					"USDMYR": usdMyrRate,
-				},
-				"timestamp": time.Now().Unix(),
+			prices := map[string]float64{
+				"MYRC": 1.00,
+				"USDT": usdMyr,
+				"USDC": usdMyr,
+				"BTC":  btcUSD * usdMyr,
+				"ETH":  ethUSD * usdMyr,
+				"SUI":  suiUSD * usdMyr,
 			}
 
-			// 4. 推送
-			b.hub.SendToUser(userID, pushData)
+			b.hub.BroadcastAll(prices)
 		}
 	}()
 }

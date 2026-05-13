@@ -24,14 +24,14 @@ func Handle[T any](
 		}
 
 		if err != nil && err.Error() != "EOF" { // 允许 GET 请求完全没有参数
-			c.JSON(http.StatusBadRequest, responses.APIResponse{Success: false, Error: "Invalid parameters: " + err.Error()})
+			c.JSON(http.StatusBadRequest, responses.APIResponse{Success: false, Message: "Invalid parameters: " + err.Error()})
 			return
 		}
 
 		// 2. Execute
 		data, err := execute(c, &req)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, responses.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, responses.APIResponse{Success: false, Message: err.Error()})
 			return
 		}
 

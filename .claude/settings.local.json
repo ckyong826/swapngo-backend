@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem \"d:\\\\UTM folder\\\\FYP\\\\Swap N Go\\\\swapngo-backend\\\\pkg\\\\responses\" -File)",
+      "Bash(Get-ChildItem -Path \"d:\\\\UTM folder\\\\FYP\\\\Swap N Go\\\\swapngo-backend\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 50)",
+      "Bash(Get-ChildItem -Path \"d:\\\\UTM folder\\\\FYP\\\\Swap N Go\\\\swapngo-backend\\\\internal\" -Recurse -Name)",
+      "Bash(Get-ChildItem -Path \"d:\\\\UTM folder\\\\FYP\\\\Swap N Go\\\\swapngo-backend\" -Recurse -Filter \"*auth_biz*\" -ErrorAction SilentlyContinue)",
+      "Bash(go build *)",
+      "Bash(docker-compose build *)"
+    ]
+  }
+}

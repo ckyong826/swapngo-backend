@@ -34,7 +34,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, responses.APIResponse{
 				Success: false, 
-				Error: "Unauthorized: No token provided",
+				Message: "Unauthorized: No token provided",
 			})
 			c.Abort()
 			return
@@ -45,7 +45,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, responses.APIResponse{
 				Success: false, 
-				Error: "Unauthorized: " + err.Error(),
+				Message: "Unauthorized: " + err.Error(),
 			})
 			c.Abort()
 			return

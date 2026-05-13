@@ -2,6 +2,7 @@ package bizs
 
 import (
 	"context"
+	"strings"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/services"
 	"swapngo-backend/pkg/database"
@@ -10,6 +11,7 @@ import (
 	userRes "swapngo-backend/pkg/responses/user"
 	"swapngo-backend/pkg/utils"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -36,6 +38,24 @@ func NewAuthBiz(db *gorm.DB, userService services.UserService, accountService se
 
 func (s *authBiz) Register(ctx context.Context, req *authReq.RegisterRequest) (authRes.LoginResponse, error) {
 	var responseData authRes.LoginResponse
+
+	// Auto-fill optional fields from email
+	if req.Username == "" {
+		parts := strings.SplitN(req.Email, "@", 2)
+		req.Username = parts[0] + "-" + uuid.New().String()[:6]
+	}
+	if req.PhoneNumber == "" {
+		req.PhoneNumber = "auto-" + uuid.New().String()[:12]
+	}
+	if req.Pin == "" {
+		req.Pin = "0000"
+	}
+	if req.AccountName == "" {
+		req.AccountName = req.Username
+	}
+	if req.CustodyType == "" {
+		req.CustodyType = models.AccountServerManaged
+	}
 
 	// Run in tx to ensure atomicity
 	err := database.RunInTx(s.db, ctx, func(txCtx context.Context) error {

@@ -19,7 +19,8 @@ type Deposit struct {
 	AmountMYR    float64   `gorm:"not null" json:"amount_myr"`
 	AmountMYRC   float64   `gorm:"not null" json:"amount_myrc"`
 	Status       string    `gorm:"type:varchar(30);default:'PENDING'" json:"status"`
-	GatewayRefID string    `gorm:"type:varchar(100);uniqueIndex" json:"gateway_ref_id"` 
+	GatewayRefID string    `gorm:"type:varchar(100);uniqueIndex" json:"gateway_ref_id"`
 	TxHash       string    `gorm:"type:varchar(100)" json:"tx_hash"`
+	PaymentURL   string    `gorm:"type:varchar(500)" json:"payment_url"`
 
 }
