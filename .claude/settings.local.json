@@ -7,7 +7,10 @@
       "Bash(Get-ChildItem -Path \"d:\\\\UTM folder\\\\FYP\\\\Swap N Go\\\\swapngo-backend\\\\internal\" -Recurse -Name)",
       "Bash(Get-ChildItem -Path \"d:\\\\UTM folder\\\\FYP\\\\Swap N Go\\\\swapngo-backend\" -Recurse -Filter \"*auth_biz*\" -ErrorAction SilentlyContinue)",
       "Bash(go build *)",
-      "Bash(docker-compose build *)"
+      "Bash(docker-compose build *)",
+      "Bash(where air *)",
+      "Bash(air)",
+      "Bash(curl -s http://localhost:8080/api/v1/public/auth/login -o /dev/null -w \"%{http_code}\")"
     ]
   }
 }

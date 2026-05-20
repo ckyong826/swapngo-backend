@@ -11,6 +11,7 @@ import (
 type DepositHandler interface {
 	DepositMYRC(ctx *gin.Context, req *requests.InitiateDepositReq) (any, error)
 	HandleWebhook(ctx *gin.Context)
+	SimulatePayment(ctx *gin.Context, _ *struct{}) (any, error)
 	ViewDeposit(ctx *gin.Context, _ *struct{}) (any, error)
 	ViewAllDeposits(ctx *gin.Context, _ *struct{}) (any, error)
 }
@@ -46,6 +47,15 @@ func (h *depositHandler) HandleWebhook(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(200, gin.H{"status": "ok"})
+}
+
+func (h *depositHandler) SimulatePayment(ctx *gin.Context, _ *struct{}) (any, error) {
+	userID := ctx.GetString("user_id")
+	id := ctx.Param("id")
+	if err := h.depositBiz.SimulatePayment(ctx.Request.Context(), userID, id); err != nil {
+		return nil, err
+	}
+	return gin.H{"status": "ok"}, nil
 }
 
 func (h *depositHandler) ViewDeposit(ctx *gin.Context, _ *struct{}) (any, error) {

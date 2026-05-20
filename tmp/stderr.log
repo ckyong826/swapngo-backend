@@ -1,0 +1,7 @@
+2026/05/20 20:20:38 [Kafka Producer] Globally initialized!
+2026/05/20 20:20:39 Failed to connect to database: failed to connect to `user=root database=swapngo`:
+	[::1]:5433 (localhost): dial error: dial tcp [::1]:5433: connectex: No connection could be made because the target machine actively refused it.
+	127.0.0.1:5433 (localhost): dial error: dial tcp 127.0.0.1:5433: connectex: No connection could be made because the target machine actively refused it.
+2026/05/20 20:20:39 Failed to initialize database: failed to connect to `user=root database=swapngo`:
+	[::1]:5433 (localhost): dial error: dial tcp [::1]:5433: connectex: No connection could be made because the target machine actively refused it.
+	127.0.0.1:5433 (localhost): dial error: dial tcp 127.0.0.1:5433: connectex: No connection could be made because the target machine actively refused it.

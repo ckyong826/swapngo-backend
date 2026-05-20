@@ -17,6 +17,7 @@ func DepositRoutes(router *gin.RouterGroup, depositHandler handlers.DepositHandl
 		privateDeposit.POST("/initiate", utils.Handle[requests.InitiateDepositReq]("Deposit initiated successfully", depositHandler.DepositMYRC))
 		privateDeposit.GET("", utils.Handle[struct{}]("Fetched all deposits successfully", depositHandler.ViewAllDeposits))
 		privateDeposit.GET("/:id", utils.Handle[struct{}]("Fetched deposit successfully", depositHandler.ViewDeposit))
+		privateDeposit.POST("/:id/simulate-paid", utils.Handle[struct{}]("Payment simulated", depositHandler.SimulatePayment))
 	}
 
 	publicDeposit := router.Group("/public/deposit")

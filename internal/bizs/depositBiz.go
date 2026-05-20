@@ -24,6 +24,7 @@ type DepositBiz interface {
 	InitiateDepositMYRC(ctx context.Context, req *requests.InitiateDepositReq, userID string) (any, error)
 	HandlePaymentWebhook(ctx context.Context, gatewayRefID string, isPaid bool) error
 	ProcessDepositEvent(ctx context.Context, depositID uuid.UUID, accountID string, amount float64) error
+	SimulatePayment(ctx context.Context, userID, depositID string) error
 	ViewDeposit(ctx context.Context, userID string, id string) (*models.Deposit, error)
 	ViewAllDeposits(ctx context.Context, userID string) ([]*models.Deposit, error)
 }
@@ -212,6 +213,18 @@ func (b *depositBiz) ViewDeposit(ctx context.Context, userID string, id string) 
 		return nil, fmt.Errorf("deposit not found")
 	}
 	return deposit, nil
+}
+
+func (b *depositBiz) SimulatePayment(ctx context.Context, userID, depositID string) error {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return fmt.Errorf("failed to fetch user account")
+	}
+	deposit, err := b.depositRepo.FirstBy(ctx, "id = ? AND account_id = ?", uuid.Must(uuid.Parse(depositID)), accounts[0].ID)
+	if err != nil || deposit == nil {
+		return fmt.Errorf("deposit not found")
+	}
+	return b.HandlePaymentWebhook(ctx, deposit.GatewayRefID, true)
 }
 
 func (b *depositBiz) ViewAllDeposits(ctx context.Context, userID string) ([]*models.Deposit, error) {

@@ -90,5 +90,27 @@ services:
       KAFKA_BROKERS: kafka:29092
     restart: always
 
+  # --- Dev Backend with hot reload (air) ---
+  backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: swapngo_api_dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - kafka
+      - kafka-init
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BROKERS: kafka:29092
+    restart: unless-stopped
+
 volumes:
   pgdata:

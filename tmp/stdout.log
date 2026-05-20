@@ -1,0 +1,5 @@
+
+2026/05/20 20:20:38 [35mD:/UTM folder/FYP/Swap N Go/swapngo-backend/pkg/database/postgres.go:21
+[0m[31m[error] [0mfailed to initialize database, got error failed to connect to `user=root database=swapngo`:
+	[::1]:5433 (localhost): dial error: dial tcp [::1]:5433: connectex: No connection could be made because the target machine actively refused it.
+	127.0.0.1:5433 (localhost): dial error: dial tcp 127.0.0.1:5433: connectex: No connection could be made because the target machine actively refused it.
