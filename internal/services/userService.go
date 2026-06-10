@@ -68,6 +68,7 @@ func (s *userService) RegisterUser(ctx context.Context, req *authReq.RegisterReq
 		PhoneNumber:  req.PhoneNumber,
 		PasswordHash: passwordHash,
 		PinHash:      pinHash,
+		Role:         models.RoleUser,
 	}
 
 	// 5. Return user

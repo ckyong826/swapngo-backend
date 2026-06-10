@@ -21,18 +21,20 @@ type WalletService interface {
 }
 
 type walletService struct {
-	walletRepo   repositories.WalletRepository
-	accountRepo  repositories.AccountRepository
-	userRepo     repositories.UserRepository
-	walletClient clients.WalletClient
+	walletRepo       repositories.WalletRepository
+	accountRepo      repositories.AccountRepository
+	userRepo         repositories.UserRepository
+	walletClient     clients.WalletClient
+	tokenBalanceRepo repositories.TokenBalanceRepository
 }
 
-func NewWalletService(repo repositories.WalletRepository, ar repositories.AccountRepository, ur repositories.UserRepository, client clients.WalletClient) WalletService {
+func NewWalletService(repo repositories.WalletRepository, ar repositories.AccountRepository, ur repositories.UserRepository, client clients.WalletClient, tbr repositories.TokenBalanceRepository) WalletService {
 	return &walletService{
-		walletRepo:   repo,
-		accountRepo:  ar,
-		userRepo:     ur,
-		walletClient: client,
+		walletRepo:       repo,
+		accountRepo:      ar,
+		userRepo:         ur,
+		walletClient:     client,
+		tokenBalanceRepo: tbr,
 	}
 }
 
@@ -119,22 +121,58 @@ func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (walle
 	if err != nil || len(accounts) == 0 {
 		return wallet.WalletInfoResponse{}, errors.New("account not found")
 	}
+	accountID := accounts[0].ID
 
-	suiWallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
+	suiWallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accountID, string(models.ChainSui))
 	if err != nil || suiWallet == nil {
 		return wallet.WalletInfoResponse{}, errors.New("SUI wallet not found")
 	}
 
+	// On-chain MYRC balance
 	balanceStr, _ := s.walletClient.GetBalance(ctx, suiWallet.ChainName, suiWallet.Address)
 	myrcAmount, _ := strconv.ParseFloat(balanceStr, 64)
 
+	balances := []wallet.TokenBalance{
+		{Token: "MYRC", Amount: myrcAmount, ValueMYR: myrcAmount},
+	}
+	totalMYR := myrcAmount
+
+	// Off-chain token balances (BTC, ETH, USDT, USDC)
+	offChainBalances, err := s.tokenBalanceRepo.GetAllForAccount(ctx, accountID)
+	if err == nil {
+		// Get live prices to calculate MYR values
+		clients.PriceMux.RLock()
+		usdMyr, _ := strconv.ParseFloat(clients.LatestPrices["USDMYR"], 64)
+		btcUSD, _ := strconv.ParseFloat(clients.LatestPrices["BTCUSDT"], 64)
+		ethUSD, _ := strconv.ParseFloat(clients.LatestPrices["ETHUSDT"], 64)
+		suiUSD, _ := strconv.ParseFloat(clients.LatestPrices["SUIUSDT"], 64)
+		clients.PriceMux.RUnlock()
+
+		tokenPriceMYR := map[models.TokenType]float64{
+			models.BTC:  btcUSD * usdMyr,
+			models.ETH:  ethUSD * usdMyr,
+			models.USDT: usdMyr,
+			models.USDC: usdMyr,
+			models.SUI:  suiUSD * usdMyr,
+		}
+
+		for _, tb := range offChainBalances {
+			priceMYR := tokenPriceMYR[tb.Token]
+			valueMYR := tb.Balance * priceMYR
+			balances = append(balances, wallet.TokenBalance{
+				Token:    string(tb.Token),
+				Amount:   tb.Balance,
+				ValueMYR: valueMYR,
+			})
+			totalMYR += valueMYR
+		}
+	}
+
 	return wallet.WalletInfoResponse{
-		SUIAddress: suiWallet.Address,
-		Email:      user.Email,
-		Balances: []wallet.TokenBalance{
-			{Token: "MYRC", Amount: myrcAmount, ValueMYR: myrcAmount},
-		},
-		TotalValueMYR: myrcAmount,
+		SUIAddress:    suiWallet.Address,
+		Email:         user.Email,
+		Balances:      balances,
+		TotalValueMYR: totalMYR,
 	}, nil
 }
 

@@ -108,7 +108,7 @@ func (s *authBiz) Login(ctx context.Context, req *authReq.LoginRequest) (authRes
 */
 func generateToken(user models.User) (authRes.LoginResponse, error) {
 	userIDStr := user.ID.String()
-	accessToken, err := utils.GenerateAccessToken(userIDStr)
+	accessToken, err := utils.GenerateAccessToken(userIDStr, string(user.Role))
 	if err != nil {
 		return authRes.LoginResponse{}, err
 	}
@@ -126,6 +126,7 @@ func generateToken(user models.User) (authRes.LoginResponse, error) {
 			Username:    user.Username,
 			Email:       user.Email,
 			PhoneNumber: user.PhoneNumber,
+			Role:        string(user.Role),
 		},
 	}, nil
 }

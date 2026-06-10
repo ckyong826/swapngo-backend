@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8080/api/v1/public/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"test@test.com\",\"password\":\"wrong\"}' -ErrorAction SilentlyContinue 2>&1)"
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8080/api/v1/public/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"test@test.com\",\"password\":\"wrong\"}' -ErrorAction SilentlyContinue 2>&1)",
+      "Bash(air -v)",
+      "Bash(tasklist /FI \"PID eq 23576\")",
+      "Bash(tasklist /FI \"PID eq 29464\")",
+      "PowerShell(Get-Process -Id 23576,29464)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/v1/public/auth/login)",
+      "Bash(docker exec *)",
+      "Bash(git -C .claude/worktrees/focused-euclid-e6cd6b log --oneline -3)",
+      "Bash(go vet *)"
     ]
   }
 }

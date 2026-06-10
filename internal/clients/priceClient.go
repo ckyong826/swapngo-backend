@@ -7,61 +7,68 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 var (
-	// 全局最新价格缓存
 	LatestPrices = make(map[string]string)
 	PriceMux     sync.RWMutex
 )
 
+// StartPriceWorker polls CoinGecko every 30s for BTC/ETH/SUI prices
+// and polls open.er-api.com every 30s for USD/MYR rate.
 func StartPriceWorker() {
-	url := "wss://stream.binance.com:9443/ws/ethusdt@ticker/solusdt@ticker/suiusdt@ticker/btcusdt@ticker"
-
-	// USD -> MYR 汇率轮询
-	go startUSDToMYRWorker()
+	// Prime both immediately, then start tickers
+	refreshCoinGeckoPrices()
+	refreshUSDToMYR()
 
 	go func() {
-		for {
-			conn, _, err := websocket.DefaultDialer.Dial(url, nil)
-			if err != nil {
-				log.Println("Binance WS Dial error, retrying...", err)
-				continue
-			}
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			refreshCoinGeckoPrices()
+		}
+	}()
 
-			for {
-				_, message, err := conn.ReadMessage()
-				if err != nil {
-					break
-				}
-				var data struct {
-					Symbol string `json:"s"`
-					Price  string `json:"c"`
-				}
-				if err := json.Unmarshal(message, &data); err != nil {
-					continue
-				}
-
-				PriceMux.Lock()
-				LatestPrices[data.Symbol] = data.Price
-				PriceMux.Unlock()
-			}
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			refreshUSDToMYR()
 		}
 	}()
 }
 
-func startUSDToMYRWorker() {
-	// 先拉一次，避免首次推送无汇率
-	refreshUSDToMYR()
+func refreshCoinGeckoPrices() {
+	url := "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd"
 
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		refreshUSDToMYR()
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Println("CoinGecko fetch error:", err)
+		return
 	}
+	defer resp.Body.Close()
+
+	// Response shape: {"bitcoin":{"usd":65000},"ethereum":{"usd":3500},"sui":{"usd":1.2}}
+	var data map[string]map[string]float64
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		log.Println("CoinGecko decode error:", err)
+		return
+	}
+
+	PriceMux.Lock()
+	defer PriceMux.Unlock()
+
+	if btc, ok := data["bitcoin"]["usd"]; ok {
+		LatestPrices["BTCUSDT"] = fmt.Sprintf("%.2f", btc)
+	}
+	if eth, ok := data["ethereum"]["usd"]; ok {
+		LatestPrices["ETHUSDT"] = fmt.Sprintf("%.2f", eth)
+	}
+	if sui, ok := data["sui"]["usd"]; ok {
+		LatestPrices["SUIUSDT"] = fmt.Sprintf("%.6f", sui)
+	}
+
+	log.Println("CoinGecko prices updated")
 }
 
 func refreshUSDToMYR() {
@@ -76,12 +83,10 @@ func refreshUSDToMYR() {
 		Result string             `json:"result"`
 		Rates  map[string]float64 `json:"rates"`
 	}
-
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		log.Println("USD/MYR decode error:", err)
 		return
 	}
-
 	if data.Result != "success" {
 		log.Println("USD/MYR api result not success:", data.Result)
 		return
@@ -96,4 +101,6 @@ func refreshUSDToMYR() {
 	PriceMux.Lock()
 	LatestPrices["USDMYR"] = fmt.Sprintf("%.6f", myr)
 	PriceMux.Unlock()
+
+	log.Println("USD/MYR rate updated:", myr)
 }

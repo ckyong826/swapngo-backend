@@ -128,7 +128,7 @@ func (b *swapBiz) ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userA
 		return nil // gracefully skip, already handled
 	}
 
-	payoutTx, err := b.tokenService.ExecuteSwapPayout(ctx, userAddress, fromToken, toToken, txDigest, amountPaid, expectedAmount)
+	payoutTx, err := b.tokenService.ExecuteSwapPayout(ctx, orderID.String(), userAddress, fromToken, toToken, txDigest, amountPaid, expectedAmount)
 	if err != nil {
 		swap.Status, _ = b.sm.Fire(swap.Status, fsm.SwapEventFailed)
 		b.swapRepo.Update(ctx, swap)

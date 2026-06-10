@@ -54,6 +54,7 @@ func main() {
 	depositRepo := repositories.NewDepositRepository(db)
 	withdrawRepo := repositories.NewWithdrawRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
+	tokenBalanceRepo := repositories.NewTokenBalanceRepository(db)
 
 	walletClient := clients.NewWalletClient()
 	paymentClient := clients.NewBillplzClient(
@@ -61,8 +62,8 @@ func main() {
 		getenv("BILLPLZ_API_KEY", ""),
 	)
 
-	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient)
-	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, suiClient)
+	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient, tokenBalanceRepo)
+	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, tokenBalanceRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
 	swapFsm := fsm.BuildSwapFSM()

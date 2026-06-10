@@ -55,7 +55,7 @@ func main() {
 	}
 
 	// Auto Migrate
-	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{}, &models.Withdrawal{}, &models.Transfer{}, &models.Swap{}, &models.KYC{})
+	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{}, &models.Withdrawal{}, &models.Transfer{}, &models.Swap{}, &models.KYC{}, &models.TokenBalance{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -70,6 +70,7 @@ func main() {
 	withdrawRepo := repositories.NewWithdrawRepository(db)
 	transferRepo := repositories.NewTransferRepository(db)
 	swapRepo := repositories.NewSwapRepository(db)
+	tokenBalanceRepo := repositories.NewTokenBalanceRepository(db)
 
 	// 3. Initialize Clients
 	walletClient := clients.NewWalletClient()
@@ -85,8 +86,8 @@ func main() {
 	// 4. Initialize Services
 	userService := services.NewUserService(userRepo)
 	accountService := services.NewAccountService(accountRepo)
-	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient)
-	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, suiClient)
+	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient, tokenBalanceRepo)
+	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, tokenBalanceRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
 	// 5. Initialize Biz
@@ -102,7 +103,7 @@ func main() {
 	swapFsm := fsm.BuildSwapFSM()
 	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, tokenService, hub, swapFsm)
 	kycEncryptKey := utils.DeriveKey(config.Env.KYCEncryptKey)
-	kycBiz := bizs.NewKYCBiz(db, kycRepo, userRepo, kycEncryptKey)
+	kycBiz := bizs.NewKYCBiz(db, kycRepo, userRepo, kycEncryptKey, hub)
 
 	// 6. Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authBiz)

@@ -40,20 +40,21 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 4. 调用你的 utils.ParseJWT 进行解析
-		userID, err := utils.ParseJWT(tokenString)
+		// 4. Parse JWT — extract both userID and role
+		userID, role, err := utils.ParseJWTClaims(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, responses.APIResponse{
-				Success: false, 
+				Success: false,
 				Message: "Unauthorized: " + err.Error(),
 			})
 			c.Abort()
 			return
 		}
 
-		// 5. 将解析出的 userID 注入上下文
+		// 5. Inject userID and role into context
 		c.Set("user_id", userID)
-		
+		c.Set("role", role)
+
 		c.Next()
 	}
 }

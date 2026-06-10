@@ -3,11 +3,10 @@ package bizs
 import (
 	"context"
 	"fmt"
-	"log"
-	"time"
 
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
+	"swapngo-backend/internal/ws"
 	kycReq "swapngo-backend/pkg/requests/kyc"
 	"swapngo-backend/pkg/utils"
 
@@ -18,6 +17,10 @@ import (
 type KYCBiz interface {
 	SubmitKYC(ctx context.Context, userID string, req *kycReq.SubmitKYCRequest) (any, error)
 	GetKYCStatus(ctx context.Context, userID string) (any, error)
+	// Admin methods
+	ListPendingKYC(ctx context.Context) (any, error)
+	ApproveKYC(ctx context.Context, kycID string) (any, error)
+	RejectKYC(ctx context.Context, kycID string, req *kycReq.RejectKYCRequest) (any, error)
 }
 
 type kycBiz struct {
@@ -25,14 +28,16 @@ type kycBiz struct {
 	kycRepo    repositories.KYCRepository
 	userRepo   repositories.UserRepository
 	encryptKey []byte
+	hub        *ws.Hub
 }
 
-func NewKYCBiz(db *gorm.DB, kycRepo repositories.KYCRepository, userRepo repositories.UserRepository, encryptKey []byte) KYCBiz {
+func NewKYCBiz(db *gorm.DB, kycRepo repositories.KYCRepository, userRepo repositories.UserRepository, encryptKey []byte, hub *ws.Hub) KYCBiz {
 	return &kycBiz{
 		db:         db,
 		kycRepo:    kycRepo,
 		userRepo:   userRepo,
 		encryptKey: encryptKey,
+		hub:        hub,
 	}
 }
 
@@ -83,8 +88,6 @@ func (b *kycBiz) SubmitKYC(ctx context.Context, userID string, req *kycReq.Submi
 		return nil, err
 	}
 
-	go b.simulateApproval(created.ID, uid)
-
 	return map[string]any{
 		"kyc_id": created.ID,
 		"status": created.Status,
@@ -106,38 +109,117 @@ func (b *kycBiz) GetKYCStatus(ctx context.Context, userID string) (any, error) {
 		"kyc_id":     kyc.ID,
 		"full_name":  kyc.FullName,
 		"status":     kyc.Status,
+		"remarks":    kyc.Remarks,
 		"created_at": kyc.CreatedAt,
 		"updated_at": kyc.UpdatedAt,
 	}, nil
 }
 
-// simulateApproval auto-approves the KYC after 30 seconds.
-func (b *kycBiz) simulateApproval(kycID uuid.UUID, userID uuid.UUID) {
-	time.Sleep(30 * time.Second)
+// ----- Admin methods -----
 
-	ctx := context.Background()
+func (b *kycBiz) ListPendingKYC(ctx context.Context) (any, error) {
+	kycs, err := b.kycRepo.FindBy(ctx, "status = ?", models.KYCStatusPending)
+	if err != nil {
+		return nil, err
+	}
 
-	kyc, err := b.kycRepo.FindByID(ctx, kycID)
-	if err != nil || kyc == nil || kyc.Status != models.KYCStatusPending {
-		return
+	type kycItem struct {
+		KYCID        string `json:"kyc_id"`
+		UserID       string `json:"user_id"`
+		FullName     string `json:"full_name"`
+		ICNumber     string `json:"ic_number"`
+		ICFrontPhoto string `json:"ic_front_photo"` // decrypted base64
+		ICBackPhoto  string `json:"ic_back_photo"`  // decrypted base64
+		Status       string `json:"status"`
+		CreatedAt    any    `json:"created_at"`
+	}
+
+	items := make([]kycItem, 0, len(kycs))
+	for _, k := range kycs {
+		icNum, _ := utils.DecryptAES(b.encryptKey, k.ICNumber)
+		icFront, _ := utils.DecryptAES(b.encryptKey, k.ICFrontPhoto)
+		icBack, _ := utils.DecryptAES(b.encryptKey, k.ICBackPhoto)
+
+		items = append(items, kycItem{
+			KYCID:        k.ID.String(),
+			UserID:       k.UserID.String(),
+			FullName:     k.FullName,
+			ICNumber:     icNum,
+			ICFrontPhoto: icFront,
+			ICBackPhoto:  icBack,
+			Status:       k.Status,
+			CreatedAt:    k.CreatedAt,
+		})
+	}
+	return items, nil
+}
+
+func (b *kycBiz) ApproveKYC(ctx context.Context, kycID string) (any, error) {
+	id := uuid.Must(uuid.Parse(kycID))
+
+	kyc, err := b.kycRepo.FindByID(ctx, id)
+	if err != nil || kyc == nil {
+		return nil, fmt.Errorf("KYC record not found")
+	}
+	if kyc.Status != models.KYCStatusPending {
+		return nil, fmt.Errorf("KYC is not in PENDING state")
 	}
 
 	kyc.Status = models.KYCStatusApproved
 	if _, err := b.kycRepo.Update(ctx, kyc); err != nil {
-		log.Printf("KYC auto-approval: failed to update KYC %s: %v", kycID, err)
-		return
+		return nil, fmt.Errorf("failed to update KYC status: %w", err)
 	}
 
-	user, err := b.userRepo.FindByID(ctx, userID)
+	user, err := b.userRepo.FindByID(ctx, kyc.UserID)
 	if err != nil || user == nil {
-		log.Printf("KYC auto-approval: failed to fetch user %s: %v", userID, err)
-		return
+		return nil, fmt.Errorf("failed to fetch user for KYC")
 	}
 	user.KycStatus = models.KycApproved
 	if _, err := b.userRepo.Update(ctx, user); err != nil {
-		log.Printf("KYC auto-approval: failed to update user KYC status for %s: %v", userID, err)
-		return
+		return nil, fmt.Errorf("failed to update user KYC status: %w", err)
 	}
 
-	log.Printf("KYC auto-approved for user %s", userID)
+	// Notify user via WebSocket
+	b.hub.SendToUser(kyc.UserID.String(), map[string]any{
+		"type":   "KYC_APPROVED",
+		"kyc_id": kyc.ID,
+	})
+
+	return map[string]any{"kyc_id": kyc.ID, "status": kyc.Status}, nil
+}
+
+func (b *kycBiz) RejectKYC(ctx context.Context, kycID string, req *kycReq.RejectKYCRequest) (any, error) {
+	id := uuid.Must(uuid.Parse(kycID))
+
+	kyc, err := b.kycRepo.FindByID(ctx, id)
+	if err != nil || kyc == nil {
+		return nil, fmt.Errorf("KYC record not found")
+	}
+	if kyc.Status != models.KYCStatusPending {
+		return nil, fmt.Errorf("KYC is not in PENDING state")
+	}
+
+	kyc.Status = models.KYCStatusRejected
+	kyc.Remarks = req.Remarks
+	if _, err := b.kycRepo.Update(ctx, kyc); err != nil {
+		return nil, fmt.Errorf("failed to update KYC status: %w", err)
+	}
+
+	user, err := b.userRepo.FindByID(ctx, kyc.UserID)
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("failed to fetch user for KYC")
+	}
+	user.KycStatus = models.KycRejected
+	if _, err := b.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update user KYC status: %w", err)
+	}
+
+	// Notify user via WebSocket
+	b.hub.SendToUser(kyc.UserID.String(), map[string]any{
+		"type":    "KYC_REJECTED",
+		"kyc_id":  kyc.ID,
+		"remarks": req.Remarks,
+	})
+
+	return map[string]any{"kyc_id": kyc.ID, "status": kyc.Status, "remarks": kyc.Remarks}, nil
 }

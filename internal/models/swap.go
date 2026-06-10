@@ -33,4 +33,19 @@ type TokenType string
 const (
 	SUI  TokenType = "SUI"
 	MYRC TokenType = "MYRC"
-)	
+	BTC  TokenType = "BTC"
+	ETH  TokenType = "ETH"
+	USDT TokenType = "USDT"
+	USDC TokenType = "USDC"
+)
+
+// IsOffChain returns true for tokens that are NOT native to the SUI blockchain.
+// Their balances are tracked in the token_balances table instead of on-chain.
+func (t TokenType) IsOffChain() bool {
+	switch t {
+	case BTC, ETH, USDT, USDC:
+		return true
+	default:
+		return false
+	}
+}	
