@@ -276,6 +276,99 @@ def test_swap(token):
 
 
 # ─────────────────────────────────────────────
+# Ledger helpers (CEX model: token_balances is the source of truth)
+# ─────────────────────────────────────────────
+
+def get_account_id(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM accounts WHERE user_id = %s;", (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    assert row is not None, f"No account for user {user_id}"
+    return str(row[0])
+
+
+def get_ledger_balance(account_id, token):
+    """Return the ledger balance for (account, token), 0 if no row."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT balance FROM token_balances WHERE account_id = %s AND token = %s;",
+        (account_id, token),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return float(row[0]) if row else 0.0
+
+
+def test_crypto_simulate_deposit(token, account_id):
+    print("\n=== 9. Simulated Crypto Deposit (BTC) ===")
+    before = get_ledger_balance(account_id, "BTC")
+    res = requests.post(
+        f"{BASE_URL}/private/crypto/deposit/simulate",
+        json={"token": "BTC", "amount": 0.5},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    print("Status:", res.status_code, "| Response:", res.json())
+    assert res.status_code == 200, f"Simulated deposit failed: {res.text}"
+    after = get_ledger_balance(account_id, "BTC")
+    assert abs(after - (before + 0.5)) < 1e-9, f"BTC ledger not credited: {before} -> {after}"
+    print(f"Ledger OK: BTC {before} -> {after}")
+
+
+def test_ledger_swap(token, account_id):
+    """Pure-ledger swap: BTC -> ETH must move ledger rows, reach SUCCESS, no chain tx."""
+    print("\n=== 10. Ledger Swap (BTC -> ETH) ===")
+    btc_before = get_ledger_balance(account_id, "BTC")
+    eth_before = get_ledger_balance(account_id, "ETH")
+    res = requests.post(
+        f"{BASE_URL}/private/swap/initiate",
+        json={
+            "from_token": "BTC",
+            "to_token": "ETH",
+            "from_amount": 0.1,
+            "estimated_amount": 0,
+            "slippage": 0.05,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    print("Status:", res.status_code, "| Response:", res.json())
+    assert res.status_code == 200, f"Swap initiate failed: {res.text}"
+    swap_id = res.json().get("data", {}).get("swap_id")
+    if swap_id:
+        final = poll_db_status("swaps", swap_id, {"SUCCESS", "FAILED"})
+        print(f"  Final swap status: {final}")
+        assert final == "SUCCESS", f"Expected SUCCESS, got {final}"
+    btc_after = get_ledger_balance(account_id, "BTC")
+    eth_after = get_ledger_balance(account_id, "ETH")
+    assert abs(btc_after - (btc_before - 0.1)) < 1e-9, f"BTC not debited: {btc_before} -> {btc_after}"
+    assert eth_after > eth_before, f"ETH not credited: {eth_before} -> {eth_after}"
+    print(f"Ledger OK: BTC {btc_before}->{btc_after}, ETH {eth_before}->{eth_after}")
+
+
+def test_crypto_simulate_withdraw(token, account_id):
+    print("\n=== 11. Simulated Crypto Withdraw (ETH) ===")
+    before = get_ledger_balance(account_id, "ETH")
+    if before <= 0:
+        print("Skipping — no ETH balance to withdraw.")
+        return
+    amount = min(before, 0.01)
+    res = requests.post(
+        f"{BASE_URL}/private/crypto/withdraw",
+        json={"token": "ETH", "amount": amount},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    print("Status:", res.status_code, "| Response:", res.json())
+    assert res.status_code == 200, f"Withdraw failed: {res.text}"
+    after = get_ledger_balance(account_id, "ETH")
+    assert abs(after - (before - amount)) < 1e-9, f"ETH not debited: {before} -> {after}"
+    print(f"Ledger OK: ETH {before} -> {after} (withdrew {amount})")
+
+
+# ─────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────
 
@@ -308,5 +401,11 @@ if __name__ == "__main__":
     test_transfer(token, receiver_user_id)
 
     test_swap(token)
+
+    # Crypto rails + pure-ledger swap (CEX model)
+    account_id = get_account_id(_user_id)
+    test_crypto_simulate_deposit(token, account_id)
+    test_ledger_swap(token, account_id)
+    test_crypto_simulate_withdraw(token, account_id)
 
     print("\n✓ All endpoint tests executed.")

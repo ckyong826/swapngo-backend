@@ -158,9 +158,20 @@ func (b *depositBiz) HandlePaymentWebhook(ctx context.Context, gatewayRefID stri
 
 // Asynchronous minting and update DB
 func (b *depositBiz) ProcessDepositEvent(ctx context.Context, depositID uuid.UUID, accountID string, amount float64) error {
-	// 1. Delegate to TokenService (Pure Web3 logic)
-	txHash, err := b.tokenService.MintingMYRCBySUI(ctx, accountID, amount)
-	
+	// 1. Credit the ledger — this is the source of truth for the user's MYRC balance.
+	err := b.tokenService.CreditToken(ctx, accountID, models.MYRC, amount)
+
+	// 1b. Best-effort real on-chain MYRC mint as a blockchain showcase. A failure
+	// here does NOT invalidate the ledger credit (the ledger is authoritative).
+	var txHash string
+	if err == nil {
+		if h, mintErr := b.tokenService.MintingMYRCBySUI(ctx, accountID, amount); mintErr != nil {
+			log.Printf("WARN: showcase MYRC mint failed for deposit %s: %v", depositID, mintErr)
+		} else {
+			txHash = h
+		}
+	}
+
 	// 2. Fetch the deposit again
 	deposit, dbErr := b.depositRepo.FindByID(ctx, depositID)
 	if dbErr != nil {

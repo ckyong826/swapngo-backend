@@ -9,7 +9,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/v1/public/auth/login)",
       "Bash(docker exec *)",
       "Bash(git -C .claude/worktrees/focused-euclid-e6cd6b log --oneline -3)",
-      "Bash(go vet *)"
+      "Bash(go vet *)",
+      "Bash(python -m py_compile tests/test_apis.py)"
     ]
   }
 }

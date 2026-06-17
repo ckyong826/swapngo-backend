@@ -21,6 +21,11 @@ type TokenService interface {
 	TransferToAddress(ctx context.Context, senderUserID string, toAddress string, amount float64) (txHash string, err error)
 	ExecuteSwap(ctx context.Context, swapID string) error
 	ExecuteSwapPayout(ctx context.Context, swapID, userAddress, fromToken, toToken, txDigest string, amountPaid, expectedAmount float64) (string, error)
+
+	// CreditToken / DebitToken move a token's ledger balance. They are the single
+	// source of truth for balances under the CEX ledger model.
+	CreditToken(ctx context.Context, accountID string, token models.TokenType, amount float64) error
+	DebitToken(ctx context.Context, accountID string, token models.TokenType, amount float64) error
 }
 
 type tokenService struct {
@@ -150,14 +155,11 @@ func (s *tokenService) ExecuteSwap(ctx context.Context, swapID string) error {
 		return fmt.Errorf("swap not found: %s", swapID)
 	}
 
+	// Wallet address is only used as a routing key in the Kafka event so the
+	// worker can resolve the account again. Balances themselves live in the ledger.
 	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, swap.AccountID, "SUI")
 	if err != nil || wallet == nil {
 		return fmt.Errorf("failed to fetch user SUI wallet")
-	}
-
-	treasuryAddr := config.Env.SUITreasuryAddress
-	if treasuryAddr == "" {
-		return fmt.Errorf("CRITICAL: SUI treasury address missing in config")
 	}
 
 	fromToken := models.TokenType(swap.FromToken)
@@ -180,35 +182,13 @@ func (s *tokenService) ExecuteSwap(ctx context.Context, swapID string) error {
 		expectedAmount = (swap.FromAmount * fromPriceMYR) / toPriceMYR
 	}
 
-	var txDigest string
-
-	switch {
-	// ── Case 1: From an on-chain SUI token (MYRC or SUI) → any token ─────────
-	case fromToken == models.MYRC:
-		// Transfer MYRC from user to treasury on-chain
-		txDigest, err = s.suiClient.TransferMYRC(ctx, wallet.PrivateKey, wallet.Address, treasuryAddr, swap.FromAmount)
-		if err != nil {
-			return fmt.Errorf("on-chain MYRC transfer to treasury failed: %w", err)
-		}
-
-	case fromToken == models.SUI:
-		// Transfer SUI from user to treasury on-chain
-		txDigest, err = s.suiClient.TransferCoin(ctx, wallet.PrivateKey, wallet.Address, treasuryAddr, swap.FromAmount)
-		if err != nil {
-			return fmt.Errorf("on-chain SUI transfer to treasury failed: %w", err)
-		}
-
-	// ── Case 2: From an off-chain token (BTC/ETH/USDT/USDC) → any token ──────
-	case fromToken.IsOffChain():
-		// Deduct from the user's off-chain balance in DB
-		if err := s.tokenBalanceRepo.DeductBalance(ctx, swap.AccountID, fromToken, swap.FromAmount); err != nil {
-			return fmt.Errorf("failed to deduct %s balance: %w", fromToken, err)
-		}
-		txDigest = "offchain" // no on-chain tx needed
-
-	default:
-		return fmt.Errorf("unsupported from-token: %s", fromToken)
+	// CEX ledger model: every token's tradeable balance lives in token_balances.
+	// Deduct the "from" leg here; the worker credits the "to" leg on payout.
+	// No on-chain transfer and no gas — swaps are pure ledger math.
+	if err := s.tokenBalanceRepo.DeductBalance(ctx, swap.AccountID, fromToken, swap.FromAmount); err != nil {
+		return fmt.Errorf("failed to deduct %s balance: %w", fromToken, err)
 	}
+	txDigest := "ledger" // no on-chain tx for swaps
 
 	// Publish Kafka event for the worker to handle payout
 	event := kafka.SwapInitiated{
@@ -231,68 +211,32 @@ func (s *tokenService) ExecuteSwap(ctx context.Context, swapID string) error {
 // ExecuteSwapPayout is called by the Kafka consumer worker after it picks up
 // a SwapInitiated event. It delivers the "to" tokens to the user.
 func (s *tokenService) ExecuteSwapPayout(ctx context.Context, swapID, userAddress, fromToken, toToken, txDigest string, amountPaid, expectedAmount float64) (string, error) {
-	adminAddress := config.Env.SUIAdminAddress
-	adminPriv := config.Env.SUIAdminPriv
-	treasuryAddress := config.Env.SUITreasuryAddress
-
-	fromT := models.TokenType(fromToken)
 	toT := models.TokenType(toToken)
 
-	// Find accountID for off-chain balance operations
+	// Find accountID for ledger balance operations
 	wallet, err := s.walletRepo.FindByAddress(ctx, userAddress)
 	if err != nil || wallet == nil {
 		return "", fmt.Errorf("failed to find wallet for address %s", userAddress)
 	}
 	accountID := wallet.AccountID
 
-	// ── Verify on-chain transfer if fromToken was on-chain ───────────────────
-	if txDigest != "offchain" {
-		var isValid bool
-		if fromToken == "SUI" {
-			isValid, err = s.suiClient.VerifyTransfer(ctx, txDigest, treasuryAddress, amountPaid)
-		} else if fromToken == "MYRC" {
-			isValid, err = s.suiClient.VerifyMYRCTransfer(ctx, txDigest, treasuryAddress, amountPaid)
-		}
-		if err != nil {
-			return "", fmt.Errorf("on-chain verification failed: %w", err)
-		}
-		if !isValid {
-			return "", fmt.Errorf("on-chain transfer verification rejected")
-		}
+	// CEX ledger payout: credit the "to" leg to the user's ledger balance.
+	// The "from" leg was already deducted in ExecuteSwap. No on-chain verify
+	// or transfer — swaps never touch the chain.
+	if err := s.tokenBalanceRepo.AddBalance(ctx, accountID, toT, expectedAmount); err != nil {
+		return "", fmt.Errorf("failed to credit %s balance: %w", toT, err)
 	}
 
-	// ── Deliver payout ────────────────────────────────────────────────────────
-	var payoutTx string
+	return "ledger", nil
+}
 
-	switch {
-	// To MYRC → mint on-chain from treasury to user
-	case toT == models.MYRC:
-		payoutTx, err = s.suiClient.TransferMYRC(ctx, adminPriv, adminAddress, userAddress, expectedAmount)
-		if err != nil {
-			return "", fmt.Errorf("MYRC payout failed: %w", err)
-		}
+// CreditToken credits a token amount to the account's ledger balance.
+func (s *tokenService) CreditToken(ctx context.Context, accountID string, token models.TokenType, amount float64) error {
+	return s.tokenBalanceRepo.AddBalance(ctx, uuid.Must(uuid.Parse(accountID)), token, amount)
+}
 
-	// To SUI → transfer SUI on-chain from treasury to user
-	case toT == models.SUI:
-		payoutTx, err = s.suiClient.TransferCoin(ctx, adminPriv, adminAddress, userAddress, expectedAmount)
-		if err != nil {
-			return "", fmt.Errorf("SUI payout failed: %w", err)
-		}
-
-	// To off-chain token (BTC/ETH/USDT/USDC) → credit DB balance
-	case toT.IsOffChain():
-		if err := s.tokenBalanceRepo.AddBalance(ctx, accountID, toT, expectedAmount); err != nil {
-			return "", fmt.Errorf("failed to credit %s balance: %w", toT, err)
-		}
-		payoutTx = "offchain"
-
-	default:
-		return "", fmt.Errorf("unsupported to-token: %s", toToken)
-	}
-
-	// If fromToken was off-chain and we haven't deducted yet (edge case guard)
-	// — deduction already happened in ExecuteSwap, nothing to do here.
-	_ = fromT
-
-	return payoutTx, nil
+// DebitToken debits a token amount from the account's ledger balance.
+// Returns an error if the balance would go negative.
+func (s *tokenService) DebitToken(ctx context.Context, accountID string, token models.TokenType, amount float64) error {
+	return s.tokenBalanceRepo.DeductBalance(ctx, uuid.Must(uuid.Parse(accountID)), token, amount)
 }

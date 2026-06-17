@@ -16,6 +16,7 @@ func SetupRouter(engine *gin.Engine,
 	withdrawHandler handlers.WithdrawHandler,
 	swapHandler handlers.SwapHandler,
 	kycHandler handlers.KYCHandler,
+	cryptoHandler handlers.CryptoHandler,
 ) {
 	api := engine.Group("/api/v1")
 	{
@@ -26,6 +27,7 @@ func SetupRouter(engine *gin.Engine,
 		WithdrawRoutes(api, withdrawHandler)
 		SwapRoutes(api, swapHandler)
 		KYCRoutes(api, kycHandler)
+		CryptoRoutes(api, cryptoHandler)
 	}
 
 	wsGroup := engine.Group("/ws")

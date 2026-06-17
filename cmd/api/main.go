@@ -55,7 +55,7 @@ func main() {
 	}
 
 	// Auto Migrate
-	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{}, &models.Withdrawal{}, &models.Transfer{}, &models.Swap{}, &models.KYC{}, &models.TokenBalance{})
+	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{}, &models.Withdrawal{}, &models.Transfer{}, &models.Swap{}, &models.KYC{}, &models.TokenBalance{}, &models.CryptoTxn{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -71,6 +71,7 @@ func main() {
 	transferRepo := repositories.NewTransferRepository(db)
 	swapRepo := repositories.NewSwapRepository(db)
 	tokenBalanceRepo := repositories.NewTokenBalanceRepository(db)
+	cryptoTxnRepo := repositories.NewCryptoTxnRepository(db)
 
 	// 3. Initialize Clients
 	walletClient := clients.NewWalletClient()
@@ -102,6 +103,7 @@ func main() {
 	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, accountRepo, tokenService, hub, transferFsm)
 	swapFsm := fsm.BuildSwapFSM()
 	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, tokenService, hub, swapFsm)
+	cryptoBiz := bizs.NewCryptoBiz(db, cryptoTxnRepo, accountRepo, tokenService, suiClient)
 	kycEncryptKey := utils.DeriveKey(config.Env.KYCEncryptKey)
 	kycBiz := bizs.NewKYCBiz(db, kycRepo, userRepo, kycEncryptKey, hub)
 
@@ -114,12 +116,13 @@ func main() {
 	transferHandler := handlers.NewTransferHandler(transferBiz)
 	swapHandler := handlers.NewSwapHandler(swapBiz)
 	kycHandler := handlers.NewKYCHandler(kycBiz)
+	cryptoHandler := handlers.NewCryptoHandler(cryptoBiz)
 
 	// 7. Setup Router
 	router := gin.Default()
 	
 	// Register all routes
-	routes.SetupRouter(router, authHandler, priceHandler, walletHandler, depositHandler, transferHandler, withdrawHandler, swapHandler, kycHandler)
+	routes.SetupRouter(router, authHandler, priceHandler, walletHandler, depositHandler, transferHandler, withdrawHandler, swapHandler, kycHandler, cryptoHandler)
 
 	// 8. Start server
 	log.Println("Server is starting on port 8080...")

@@ -128,10 +128,20 @@ func (b *withdrawBiz) ProcessWithdrawEvent(ctx context.Context, wUUID uuid.UUID,
 	}
 
 	// ==========================================
-	// 步骤 A: 扣除 Web3 资产 (转移到平台国库 Treasury)
+	// 步骤 A: 扣除账本余额 (source of truth)，链上转账到国库仅作展示
 	// ==========================================
-	txHash, err := b.tokenService.TransferToTreasury(ctx, withdrawal.AccountID.String(), amountMYRC)
-	
+	// Debit the ledger — authoritative. The on-chain transfer to treasury is a
+	// best-effort blockchain showcase and does not block the withdrawal.
+	err = b.tokenService.DebitToken(ctx, withdrawal.AccountID.String(), models.MYRC, amountMYRC)
+	var txHash string
+	if err == nil {
+		if h, burnErr := b.tokenService.TransferToTreasury(ctx, withdrawal.AccountID.String(), amountMYRC); burnErr != nil {
+			log.Printf("WARN: showcase MYRC treasury transfer failed for withdraw %s: %v", wUUID, burnErr)
+		} else {
+			txHash = h
+		}
+	}
+
 	// 获取锁更新数据库
 	var shouldProceedToFiat bool
 	_ = database.RunInTx(b.db, ctx, func(txCtx context.Context) error {

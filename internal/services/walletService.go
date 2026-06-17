@@ -39,12 +39,12 @@ func NewWalletService(repo repositories.WalletRepository, ar repositories.Accoun
 }
 
 func (s *walletService) GenerateWalletsForAccount(ctx context.Context, accountId uuid.UUID) error {
-	// 1. Define each chains
+	// 1. Define each chains.
+	// CEX ledger model: balances live in token_balances, not per-user on-chain
+	// wallets. Only SUI is a real chain (deposit/withdraw edge), so it's the only
+	// per-user wallet we generate. ETH/SOLANA/POLYGON wallets were dead.
 	chains := []models.ChainName{
 		models.ChainSui,
-		models.ChainEthereum,
-		models.ChainSolana,
-		models.ChainPolygon,
 	}
 
 	// 2. Repeatedly generate address for each chain
@@ -128,44 +128,40 @@ func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (walle
 		return wallet.WalletInfoResponse{}, errors.New("SUI wallet not found")
 	}
 
-	// On-chain MYRC balance
-	balanceStr, _ := s.walletClient.GetBalance(ctx, suiWallet.ChainName, suiWallet.Address)
-	myrcAmount, _ := strconv.ParseFloat(balanceStr, 64)
-
-	balances := []wallet.TokenBalance{
-		{Token: "MYRC", Amount: myrcAmount, ValueMYR: myrcAmount},
+	// All balances come from the ledger (single source of truth for every token,
+	// including MYRC and SUI). The chain is only touched at deposit/withdraw.
+	ledgerBalances, err := s.tokenBalanceRepo.GetAllForAccount(ctx, accountID)
+	if err != nil {
+		return wallet.WalletInfoResponse{}, err
 	}
-	totalMYR := myrcAmount
 
-	// Off-chain token balances (BTC, ETH, USDT, USDC)
-	offChainBalances, err := s.tokenBalanceRepo.GetAllForAccount(ctx, accountID)
-	if err == nil {
-		// Get live prices to calculate MYR values
-		clients.PriceMux.RLock()
-		usdMyr, _ := strconv.ParseFloat(clients.LatestPrices["USDMYR"], 64)
-		btcUSD, _ := strconv.ParseFloat(clients.LatestPrices["BTCUSDT"], 64)
-		ethUSD, _ := strconv.ParseFloat(clients.LatestPrices["ETHUSDT"], 64)
-		suiUSD, _ := strconv.ParseFloat(clients.LatestPrices["SUIUSDT"], 64)
-		clients.PriceMux.RUnlock()
+	// Live prices to calculate MYR values.
+	clients.PriceMux.RLock()
+	usdMyr, _ := strconv.ParseFloat(clients.LatestPrices["USDMYR"], 64)
+	btcUSD, _ := strconv.ParseFloat(clients.LatestPrices["BTCUSDT"], 64)
+	ethUSD, _ := strconv.ParseFloat(clients.LatestPrices["ETHUSDT"], 64)
+	suiUSD, _ := strconv.ParseFloat(clients.LatestPrices["SUIUSDT"], 64)
+	clients.PriceMux.RUnlock()
 
-		tokenPriceMYR := map[models.TokenType]float64{
-			models.BTC:  btcUSD * usdMyr,
-			models.ETH:  ethUSD * usdMyr,
-			models.USDT: usdMyr,
-			models.USDC: usdMyr,
-			models.SUI:  suiUSD * usdMyr,
-		}
+	tokenPriceMYR := map[models.TokenType]float64{
+		models.MYRC: 1.0,
+		models.BTC:  btcUSD * usdMyr,
+		models.ETH:  ethUSD * usdMyr,
+		models.USDT: usdMyr,
+		models.USDC: usdMyr,
+		models.SUI:  suiUSD * usdMyr,
+	}
 
-		for _, tb := range offChainBalances {
-			priceMYR := tokenPriceMYR[tb.Token]
-			valueMYR := tb.Balance * priceMYR
-			balances = append(balances, wallet.TokenBalance{
-				Token:    string(tb.Token),
-				Amount:   tb.Balance,
-				ValueMYR: valueMYR,
-			})
-			totalMYR += valueMYR
-		}
+	var balances []wallet.TokenBalance
+	var totalMYR float64
+	for _, tb := range ledgerBalances {
+		valueMYR := tb.Balance * tokenPriceMYR[tb.Token]
+		balances = append(balances, wallet.TokenBalance{
+			Token:    string(tb.Token),
+			Amount:   tb.Balance,
+			ValueMYR: valueMYR,
+		})
+		totalMYR += valueMYR
 	}
 
 	return wallet.WalletInfoResponse{
@@ -203,16 +199,12 @@ func (s *walletService) GetMYRCBalanceByUserID(ctx context.Context, userID strin
 		return "0", errors.New("multiple accounts found")
 	}
 
-	wallet, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
+	// MYRC balance is read from the ledger (source of truth), not the chain.
+	balance, err := s.tokenBalanceRepo.GetBalance(ctx, accounts[0].ID, models.MYRC)
 	if err != nil {
 		return "0", err
 	}
 
-	balance, err := s.walletClient.GetBalance(ctx, wallet.ChainName, wallet.Address)
-	if err != nil {
-		return "0", err
-	}
-
-	return balance,nil
+	return strconv.FormatFloat(balance, 'f', -1, 64), nil
 }
 	
