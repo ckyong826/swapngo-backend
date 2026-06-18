@@ -139,17 +139,18 @@ func (b *transferBiz) ProcessTransferEvent(ctx context.Context, tUUID uuid.UUID,
 
 	// 3. WebSocket 通知发送方
 	if err == nil {
-		b.hub.SendToUser(senderID, map[string]any{
-			"type":    "TRANSFER_SUCCESS",
-			"amount":  amount,
-			"tx_hash": txHash,
-		})
+		b.hub.SendToUser(senderID, ws.Event("TRANSFER_SUCCESS", map[string]any{
+			"transfer_id": tUUID,
+			"amount":      amount,
+			"tx_hash":     txHash,
+		}))
 		return nil
 	} else {
-		b.hub.SendToUser(senderID, map[string]any{
-			"type":   "TRANSFER_FAILED",
-			"reason": "blockchain error",
-		})
+		b.hub.SendToUser(senderID, ws.Event("TRANSFER_FAILED", map[string]any{
+			"transfer_id": tUUID,
+			"amount":      amount,
+			"reason":      "blockchain error",
+		}))
 		return err
 	}
 }

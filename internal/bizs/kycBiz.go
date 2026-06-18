@@ -180,10 +180,9 @@ func (b *kycBiz) ApproveKYC(ctx context.Context, kycID string) (any, error) {
 	}
 
 	// Notify user via WebSocket
-	b.hub.SendToUser(kyc.UserID.String(), map[string]any{
-		"type":   "KYC_APPROVED",
+	b.hub.SendToUser(kyc.UserID.String(), ws.Event("KYC_APPROVED", map[string]any{
 		"kyc_id": kyc.ID,
-	})
+	}))
 
 	return map[string]any{"kyc_id": kyc.ID, "status": kyc.Status}, nil
 }
@@ -215,11 +214,10 @@ func (b *kycBiz) RejectKYC(ctx context.Context, kycID string, req *kycReq.Reject
 	}
 
 	// Notify user via WebSocket
-	b.hub.SendToUser(kyc.UserID.String(), map[string]any{
-		"type":    "KYC_REJECTED",
+	b.hub.SendToUser(kyc.UserID.String(), ws.Event("KYC_REJECTED", map[string]any{
 		"kyc_id":  kyc.ID,
 		"remarks": req.Remarks,
-	})
+	}))
 
 	return map[string]any{"kyc_id": kyc.ID, "status": kyc.Status, "remarks": kyc.Remarks}, nil
 }

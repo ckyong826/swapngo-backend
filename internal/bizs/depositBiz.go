@@ -188,6 +188,15 @@ func (b *depositBiz) ProcessDepositEvent(ctx context.Context, depositID uuid.UUI
 		if _, updateErr := b.depositRepo.Update(ctx, deposit); updateErr != nil {
 			return fmt.Errorf("failed to update deposit to failed: %w", updateErr)
 		}
+
+		// Notify Frontend of failure (hub is keyed by user ID, not account ID)
+		if account, accErr := b.accountRepo.FindByID(ctx, uuid.Must(uuid.Parse(accountID))); accErr == nil && account != nil {
+			b.hub.SendToUser(account.UserID.String(), ws.Event("DEPOSIT_FAILED", map[string]any{
+				"deposit_id": deposit.ID,
+				"amount":     amount,
+				"reason":     "blockchain error",
+			}))
+		}
 		return err
 	}
 
@@ -200,11 +209,11 @@ func (b *depositBiz) ProcessDepositEvent(ctx context.Context, depositID uuid.UUI
 	// 4. Notify Frontend (hub is keyed by user ID, not account ID)
 	account, accErr := b.accountRepo.FindByID(ctx, uuid.Must(uuid.Parse(accountID)))
 	if accErr == nil && account != nil {
-		b.hub.SendToUser(account.UserID.String(), map[string]any{
-			"type":    "DEPOSIT_SUCCESS",
-			"amount":  amount,
-			"tx_hash": txHash,
-		})
+		b.hub.SendToUser(account.UserID.String(), ws.Event("DEPOSIT_SUCCESS", map[string]any{
+			"deposit_id": deposit.ID,
+			"amount":     amount,
+			"tx_hash":    txHash,
+		}))
 	}
 	return nil
 }

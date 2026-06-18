@@ -167,7 +167,11 @@ func (b *withdrawBiz) ProcessWithdrawEvent(ctx context.Context, wUUID uuid.UUID,
 	})
 
 	if !shouldProceedToFiat {
-		b.hub.SendToUser(userID, map[string]any{"type": "WITHDRAW_FAILED", "reason": "blockchain error"})
+		b.hub.SendToUser(userID, ws.Event("WITHDRAW_FAILED", map[string]any{
+			"withdraw_id": wUUID,
+			"amount":      amountMYR,
+			"reason":      "blockchain error",
+		}))
 		return fmt.Errorf("web3 process failed: %w", err)
 	}
 
@@ -199,14 +203,18 @@ func (b *withdrawBiz) ProcessWithdrawEvent(ctx context.Context, wUUID uuid.UUID,
 
 	// 推送最终结果给前端
 	if payoutErr == nil {
-		b.hub.SendToUser(userID, map[string]any{
-			"type":    "WITHDRAW_SUCCESS",
-			"amount":  amountMYR,
-			"tx_hash": txHash,
-		})
+		b.hub.SendToUser(userID, ws.Event("WITHDRAW_SUCCESS", map[string]any{
+			"withdraw_id": wUUID,
+			"amount":      amountMYR,
+			"tx_hash":     txHash,
+		}))
 		return nil
 	} else {
-		b.hub.SendToUser(userID, map[string]any{"type": "WITHDRAW_FAILED", "reason": "bank payout error"})
+		b.hub.SendToUser(userID, ws.Event("WITHDRAW_FAILED", map[string]any{
+			"withdraw_id": wUUID,
+			"amount":      amountMYR,
+			"reason":      "bank payout error",
+		}))
 		return fmt.Errorf("fiat payout failed: %w", payoutErr)
 	}
 }

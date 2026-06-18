@@ -50,7 +50,7 @@ func (b *priceBiz) StartBroadcasting() {
 				"SUI":  suiUSD * usdMyr,
 			}
 
-			b.hub.BroadcastAll(prices)
+			b.hub.BroadcastAll(ws.Event("PRICE_UPDATE", prices))
 		}
 	}()
 }

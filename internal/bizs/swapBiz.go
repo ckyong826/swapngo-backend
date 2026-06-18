@@ -132,6 +132,15 @@ func (b *swapBiz) ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userA
 	if err != nil {
 		swap.Status, _ = b.sm.Fire(swap.Status, fsm.SwapEventFailed)
 		b.swapRepo.Update(ctx, swap)
+
+		if account, accErr := b.accountRepo.FindByID(ctx, swap.AccountID); accErr == nil && account != nil {
+			b.hub.SendToUser(account.UserID.String(), ws.Event("SWAP_FAILED", map[string]any{
+				"swap_id":    swap.ID,
+				"from_token": swap.FromToken,
+				"to_token":   swap.ToToken,
+				"reason":     "blockchain error",
+			}))
+		}
 		return fmt.Errorf("failed to process payout: %w", err)
 	}
 
@@ -144,7 +153,13 @@ func (b *swapBiz) ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userA
 
 	account, accErr := b.accountRepo.FindByID(ctx, swap.AccountID)
 	if accErr == nil && account != nil {
-		b.hub.SendToUser(account.UserID.String(), map[string]any{"type": "SWAP_COMPLETED", "swap_id": swap.ID})
+		b.hub.SendToUser(account.UserID.String(), ws.Event("SWAP_COMPLETED", map[string]any{
+			"swap_id":    swap.ID,
+			"from_token": swap.FromToken,
+			"to_token":   swap.ToToken,
+			"to_amount":  swap.ActualToAmount,
+			"tx_hash":    swap.TxHash,
+		}))
 	}
 	return nil
 }

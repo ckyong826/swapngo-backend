@@ -10,7 +10,10 @@
       "Bash(docker exec *)",
       "Bash(git -C .claude/worktrees/focused-euclid-e6cd6b log --oneline -3)",
       "Bash(go vet *)",
-      "Bash(python -m py_compile tests/test_apis.py)"
+      "Bash(python -m py_compile tests/test_apis.py)",
+      "mcp__claude_ai_Excalidraw__read_me",
+      "mcp__claude_ai_Excalidraw__create_view",
+      "mcp__claude_ai_Excalidraw__export_to_excalidraw"
     ]
   }
 }
