@@ -27,10 +27,6 @@ func NewSwapHandler(sb bizs.SwapBiz) SwapHandler {
 func (h *swapHandler) InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapReq) (any, error) {
 	userID := ctx.GetString("user_id")
 
-	estimated := req.EstimatedAmount
-	if estimated == 0 {
-		estimated = req.Amount
-	}
 	slippage := req.Slippage
 	if slippage == 0 {
 		slippage = 0.01
@@ -42,7 +38,7 @@ func (h *swapHandler) InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapRe
 		req.FromToken,
 		req.ToToken,
 		req.Amount,
-		estimated,
+		req.EstimatedAmount,
 		slippage,
 	)
 	if err != nil {

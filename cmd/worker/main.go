@@ -73,10 +73,10 @@ func main() {
 
 	hub := ws.NewHub() // standalone hub for the worker
 
-	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, tokenService, hub, swapFsm)
-	depositBiz := bizs.NewDepositBiz(db, depositRepo, tokenService, accountRepo, hub, depositFsm, paymentClient, depositService)
-	withdrawBiz := bizs.NewWithdrawBiz(db, withdrawRepo, accountRepo, tokenService, walletService, paymentClient, hub, withdrawFsm)
-	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, accountRepo, tokenService, hub, transferFsm)
+	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, userRepo, tokenBalanceRepo, tokenService, hub, swapFsm)
+	depositBiz := bizs.NewDepositBiz(db, depositRepo, tokenService, accountRepo, userRepo, hub, depositFsm, paymentClient, depositService)
+	withdrawBiz := bizs.NewWithdrawBiz(db, withdrawRepo, accountRepo, userRepo, tokenService, walletService, paymentClient, hub, withdrawFsm)
+	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, accountRepo, userRepo, tokenService, hub, transferFsm)
 
 	// 5. Init Handlers
 	swapHandler := kafka.NewSwapHandler(swapBiz)

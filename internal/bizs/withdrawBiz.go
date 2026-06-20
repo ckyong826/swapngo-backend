@@ -30,6 +30,7 @@ type withdrawBiz struct {
 	db             *gorm.DB
 	withdrawRepo   repositories.WithdrawRepository
 	accountRepo    repositories.AccountRepository
+	userRepo       repositories.UserRepository
 	tokenService   services.TokenService
 	walletService  services.WalletService
 	paymentClient  clients.IPaymentClient
@@ -37,11 +38,12 @@ type withdrawBiz struct {
 	sm             *fsm.StateMachine
 }
 
-func NewWithdrawBiz(db *gorm.DB, wr repositories.WithdrawRepository, ar repositories.AccountRepository, ts services.TokenService, ws services.WalletService, pc clients.IPaymentClient, hub *ws.Hub, sm *fsm.StateMachine) WithdrawBiz {
+func NewWithdrawBiz(db *gorm.DB, wr repositories.WithdrawRepository, ar repositories.AccountRepository, ur repositories.UserRepository, ts services.TokenService, ws services.WalletService, pc clients.IPaymentClient, hub *ws.Hub, sm *fsm.StateMachine) WithdrawBiz {
 	return &withdrawBiz{
 		db:             db,
 		withdrawRepo:   wr,
 		accountRepo:    ar,
+		userRepo:       ur,
 		tokenService:   ts,
 		walletService:  ws,
 		paymentClient:  pc,
@@ -52,6 +54,14 @@ func NewWithdrawBiz(db *gorm.DB, wr repositories.WithdrawRepository, ar reposito
 
 // InitiateWithdrawal 
 func (b *withdrawBiz) InitiateWithdrawal(ctx context.Context, userID string, amountMYRC float64, bankName, bankAccountNo string) (*models.Withdrawal, error) {
+	user, err := b.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("failed to fetch user")
+	}
+	if user.KycStatus != models.KycApproved {
+		return nil, fmt.Errorf("KYC not approved")
+	}
+
 	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || len(accounts) == 0 {
 		log.Printf("CRITICAL: Failed to fetch account for user %s", userID)

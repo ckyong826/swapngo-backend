@@ -24,11 +24,15 @@ type TokenService interface {
 	CreditToken(ctx context.Context, accountID string, token models.TokenType, amount float64) error
 	DebitToken(ctx context.Context, accountID string, token models.TokenType, amount float64) error
 
+	// QuoteSwap returns the live-price-based amount of toToken received for
+	// fromAmount of fromToken, using the cached rates from the price worker.
+	QuoteSwap(fromToken, toToken string, fromAmount float64) (toAmount float64, err error)
+
 	// ExecuteSwapLegs runs both legs of a swap (deduct "from", credit "to") for
 	// the worker. MYRC legs move real on-chain MYRC (treasury<->user) before
 	// touching the ledger, since MYRC balance must follow the chain; other
-	// tokens are ledger-only. If toAmount is 0 it is resolved here from live
-	// prices. Returns the resolved "to" amount and a representative tx hash.
+	// tokens are ledger-only. toAmount is the rate locked at quote time
+	// (InitiateSwap) and is used as-is, not recomputed here.
 	ExecuteSwapLegs(ctx context.Context, accountID, fromToken, toToken string, fromAmount, toAmount float64) (resolvedToAmount float64, txHash string, err error)
 }
 
@@ -132,6 +136,23 @@ func (s *tokenService) TransferToAddress(ctx context.Context, fromAddress string
 
 // ── swap ───────────────────────────────────────────────────────────────────
 
+// QuoteSwap computes the live-price-based toAmount for a fromToken->toToken
+// swap. Used by InitiateSwap to lock a rate at quote time.
+func (s *tokenService) QuoteSwap(fromToken, toToken string, fromAmount float64) (float64, error) {
+	fromPriceMYR, err := livePriceMYR(fromToken)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get from-token price: %w", err)
+	}
+	toPriceMYR, err := livePriceMYR(toToken)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get to-token price: %w", err)
+	}
+	if toPriceMYR == 0 {
+		return 0, fmt.Errorf("to-token price is zero")
+	}
+	return (fromAmount * fromPriceMYR) / toPriceMYR, nil
+}
+
 // ExecuteSwapLegs is called by the Kafka consumer worker after a swap order
 // is created. MYRC legs move real on-chain MYRC (treasury<->user) before the
 // ledger is touched, so MYRC balance always follows the chain; other tokens
@@ -142,21 +163,6 @@ func (s *tokenService) ExecuteSwapLegs(ctx context.Context, accountID, fromToken
 	fromT := models.TokenType(fromToken)
 	toT := models.TokenType(toToken)
 	acctUUID := uuid.Must(uuid.Parse(accountID))
-
-	if toAmount == 0 {
-		fromPriceMYR, err := livePriceMYR(fromToken)
-		if err != nil {
-			return 0, "", fmt.Errorf("failed to get from-token price: %w", err)
-		}
-		toPriceMYR, err := livePriceMYR(toToken)
-		if err != nil {
-			return 0, "", fmt.Errorf("failed to get to-token price: %w", err)
-		}
-		if toPriceMYR == 0 {
-			return 0, "", fmt.Errorf("to-token price is zero")
-		}
-		toAmount = (fromAmount * fromPriceMYR) / toPriceMYR
-	}
 
 	// From-leg: MYRC moves real on-chain funds to treasury first; the ledger
 	// is only debited once that confirms. Other tokens are ledger-only.

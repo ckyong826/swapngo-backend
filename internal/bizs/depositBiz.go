@@ -34,18 +34,20 @@ type depositBiz struct {
 	depositRepo    repositories.DepositRepository
 	tokenService   services.TokenService
 	accountRepo    repositories.AccountRepository
+	userRepo       repositories.UserRepository
 	hub            *ws.Hub
 	sm             *fsm.StateMachine
 	paymentClient  clients.IPaymentClient
 	depositService services.DepositService
 }
 
-func NewDepositBiz(db *gorm.DB, dr repositories.DepositRepository, ts services.TokenService, ar repositories.AccountRepository, hub *ws.Hub, sm *fsm.StateMachine, pc clients.IPaymentClient, ds services.DepositService) DepositBiz {
+func NewDepositBiz(db *gorm.DB, dr repositories.DepositRepository, ts services.TokenService, ar repositories.AccountRepository, ur repositories.UserRepository, hub *ws.Hub, sm *fsm.StateMachine, pc clients.IPaymentClient, ds services.DepositService) DepositBiz {
 	return &depositBiz{
 		db:             db,
 		depositRepo:    dr,
 		tokenService:   ts,
 		accountRepo:    ar,
+		userRepo:       ur,
 		hub:            hub,
 		sm:             sm,
 		paymentClient:  pc,
@@ -54,6 +56,14 @@ func NewDepositBiz(db *gorm.DB, dr repositories.DepositRepository, ts services.T
 }
 
 func (b *depositBiz) InitiateDepositMYRC(ctx context.Context, req *requests.InitiateDepositReq, userID string) (any, error) {
+	user, err := b.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("failed to fetch user")
+	}
+	if user.KycStatus != models.KycApproved {
+		return nil, fmt.Errorf("KYC not approved")
+	}
+
 	// 1. Get user account
 	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || len(accounts) == 0 {

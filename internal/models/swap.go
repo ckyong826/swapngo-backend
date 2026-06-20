@@ -1,6 +1,8 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -10,12 +12,13 @@ type Swap struct {
 	AccountID            uuid.UUID `gorm:"type:uuid;not null;index"`
 	FromToken         TokenType    `gorm:"type:varchar(20);not null"` // 例如 "MYRC"
 	ToToken           TokenType    `gorm:"type:varchar(20);not null"` // 例如 "SUI"
-	
+
 	FromAmount        float64   `gorm:"not null"`
-	EstimatedToAmount float64   `gorm:"not null"` // 用户确认兑换时的期望金额
+	EstimatedToAmount float64   `gorm:"not null"` // 服务端按实时价格锁定的兑换金额
 	ActualToAmount    float64   `gorm:"default:0"`// 链上实际换到的金额 (受滑点影响)
 	SlippageTolerance float64   `gorm:"not null"` // 滑点容忍度，例如 0.01 代表 1%
-	
+	QuoteExpiresAt    time.Time `gorm:"not null"` // 锁定汇率的有效期，过期则结算失败
+
 	Status            string    `gorm:"type:varchar(30);default:'PENDING'"`
 	TxHash            string    `gorm:"type:varchar(100)"`
 }

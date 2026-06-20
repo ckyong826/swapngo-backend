@@ -29,17 +29,19 @@ type transferBiz struct {
 	transferRepo repositories.TransferRepository
 	walletRepo repositories.WalletRepository
 	accountRepo    repositories.AccountRepository
+	userRepo     repositories.UserRepository
 	tokenService services.TokenService
 	hub          *ws.Hub
 	sm           *fsm.StateMachine
 }
 
-func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr repositories.WalletRepository,ar repositories.AccountRepository,  ts services.TokenService, hub *ws.Hub, sm *fsm.StateMachine) TransferBiz {
+func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr repositories.WalletRepository,ar repositories.AccountRepository, ur repositories.UserRepository, ts services.TokenService, hub *ws.Hub, sm *fsm.StateMachine) TransferBiz {
 	return &transferBiz{
 		db:           db,
 		transferRepo: tr,
 		walletRepo: wr,
 		accountRepo: ar,
+		userRepo:     ur,
 		tokenService: ts,
 		hub:          hub,
 		sm:           sm,
@@ -47,6 +49,14 @@ func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr reposito
 }
 
 func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, toAddress string, amount float64) (*models.Transfer, error) {
+	user, err := b.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("failed to fetch user")
+	}
+	if user.KycStatus != models.KycApproved {
+		return nil, fmt.Errorf("KYC not approved")
+	}
+
 	// 1. Fetch sender account and wallet
 	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || len(accounts) == 0 {

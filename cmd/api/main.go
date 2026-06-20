@@ -54,6 +54,13 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// Backfill quote_expires_at for legacy swap rows that predate this column,
+	// otherwise AutoMigrate's NOT NULL constraint fails on existing nulls.
+	if db.Migrator().HasTable(&models.Swap{}) {
+		db.Exec(`ALTER TABLE swaps ADD COLUMN IF NOT EXISTS quote_expires_at timestamptz`)
+		db.Exec(`UPDATE swaps SET quote_expires_at = created_at WHERE quote_expires_at IS NULL`)
+	}
+
 	// Auto Migrate
 	err = db.AutoMigrate(&models.User{}, &models.Account{}, &models.Wallet{}, &models.Deposit{}, &models.Withdrawal{}, &models.Transfer{}, &models.Swap{}, &models.KYC{}, &models.TokenBalance{}, &models.CryptoTxn{})
 	if err != nil {
@@ -96,13 +103,13 @@ func main() {
 	priceBiz := bizs.NewPriceBiz(hub)
 	priceBiz.StartBroadcasting()
 	depositFsm := fsm.BuildDepositFSM()
-	depositBiz := bizs.NewDepositBiz(db, depositRepo, tokenService, accountRepo, hub, depositFsm, paymentClient, depositService)
+	depositBiz := bizs.NewDepositBiz(db, depositRepo, tokenService, accountRepo, userRepo, hub, depositFsm, paymentClient, depositService)
 	withdrawFsm := fsm.BuildWithdrawFSM()
-	withdrawBiz := bizs.NewWithdrawBiz(db, withdrawRepo,accountRepo, tokenService,walletService,paymentClient, hub, withdrawFsm)
+	withdrawBiz := bizs.NewWithdrawBiz(db, withdrawRepo,accountRepo, userRepo, tokenService,walletService,paymentClient, hub, withdrawFsm)
 	transferFsm := fsm.BuildTransferFSM()
-	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, accountRepo, tokenService, hub, transferFsm)
+	transferBiz := bizs.NewTransferBiz(db, transferRepo, walletRepo, accountRepo, userRepo, tokenService, hub, transferFsm)
 	swapFsm := fsm.BuildSwapFSM()
-	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, tokenService, hub, swapFsm)
+	swapBiz := bizs.NewSwapBiz(db, swapRepo, accountRepo, userRepo, tokenBalanceRepo, tokenService, hub, swapFsm)
 	cryptoBiz := bizs.NewCryptoBiz(db, cryptoTxnRepo, accountRepo, tokenService, suiClient)
 	kycEncryptKey := utils.DeriveKey(config.Env.KYCEncryptKey)
 	kycBiz := bizs.NewKYCBiz(db, kycRepo, userRepo, kycEncryptKey, hub)
