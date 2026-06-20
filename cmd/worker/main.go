@@ -63,7 +63,7 @@ func main() {
 	)
 
 	walletService := services.NewWalletService(walletRepo, accountRepo, userRepo, walletClient, tokenBalanceRepo)
-	tokenService := services.NewTokenService(walletRepo, swapRepo, accountRepo, tokenBalanceRepo, suiClient)
+	tokenService := services.NewTokenService(walletRepo, accountRepo, tokenBalanceRepo, suiClient)
 	depositService := services.NewDepositService(depositRepo)
 
 	swapFsm := fsm.BuildSwapFSM()

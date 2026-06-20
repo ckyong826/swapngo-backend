@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"swapngo-backend/internal/fsm"
+	"swapngo-backend/internal/kafka"
 	"swapngo-backend/internal/models"
 	"swapngo-backend/internal/repositories"
 	"swapngo-backend/internal/services"
@@ -76,10 +77,16 @@ func (b *swapBiz) InitiateSwap(ctx context.Context, userID, fromToken, toToken s
 		return nil, err
 	}
 
-	// 2. 异步执行 Web3 链上智能合约调用
-	err = b.tokenService.ExecuteSwap(ctx, swap.ID.String())
-	if err != nil {
-		return nil, err
+	// 2. 发布事件，链上与账本操作均在 worker 中异步完成
+	event := kafka.SwapInitiated{
+		OrderID:        swap.ID,
+		FromToken:      fromToken,
+		ToToken:        toToken,
+		AmountPaid:     fromAmount,
+		ExpectedAmount: estimatedAmount,
+	}
+	if pubErr := kafka.PublishSwapInitiatedEvent(ctx, "swap_events_topic", event); pubErr != nil {
+		return nil, pubErr
 	}
 	return swap, nil
 }
@@ -128,7 +135,7 @@ func (b *swapBiz) ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userA
 		return nil // gracefully skip, already handled
 	}
 
-	payoutTx, err := b.tokenService.ExecuteSwapPayout(ctx, orderID.String(), userAddress, fromToken, toToken, txDigest, amountPaid, expectedAmount)
+	resolvedToAmount, txHash, err := b.tokenService.ExecuteSwapLegs(ctx, swap.AccountID.String(), fromToken, toToken, amountPaid, expectedAmount)
 	if err != nil {
 		swap.Status, _ = b.sm.Fire(swap.Status, fsm.SwapEventFailed)
 		b.swapRepo.Update(ctx, swap)
@@ -141,12 +148,12 @@ func (b *swapBiz) ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userA
 				"reason":     "blockchain error",
 			}))
 		}
-		return fmt.Errorf("failed to process payout: %w", err)
+		return fmt.Errorf("failed to process swap legs: %w", err)
 	}
 
 	swap.Status, _ = b.sm.Fire(swap.Status, fsm.SwapEventSuccess)
-	swap.TxHash = payoutTx
-	swap.ActualToAmount = expectedAmount
+	swap.TxHash = txHash
+	swap.ActualToAmount = resolvedToAmount
 	if _, err := b.swapRepo.Update(ctx, swap); err != nil {
 		return fmt.Errorf("db error setting success: %w", err)
 	}

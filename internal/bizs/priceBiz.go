@@ -1,7 +1,6 @@
 package bizs
 
 import (
-	"strconv"
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/ws"
 	"time"
@@ -20,11 +19,6 @@ func NewPriceBiz(hub *ws.Hub) PriceBiz {
 	return &priceBiz{hub: hub}
 }
 
-func parsePrice(s string) float64 {
-	v, _ := strconv.ParseFloat(s, 64)
-	return v
-}
-
 func (b *priceBiz) StartBroadcasting() {
 	if b.started {
 		return
@@ -35,10 +29,10 @@ func (b *priceBiz) StartBroadcasting() {
 	go func() {
 		for range ticker.C {
 			clients.PriceMux.RLock()
-			ethUSD := parsePrice(clients.LatestPrices["ETHUSDT"])
-			suiUSD := parsePrice(clients.LatestPrices["SUIUSDT"])
-			btcUSD := parsePrice(clients.LatestPrices["BTCUSDT"])
-			usdMyr := parsePrice(clients.LatestPrices["USDMYR"])
+			ethUSD := clients.PriceOrFallback("ETHUSDT", clients.FallbackETHUSDT)
+			suiUSD := clients.PriceOrFallback("SUIUSDT", clients.FallbackSUIUSDT)
+			btcUSD := clients.PriceOrFallback("BTCUSDT", clients.FallbackBTCUSDT)
+			usdMyr := clients.PriceOrFallback("USDMYR", clients.FallbackUSDMYR)
 			clients.PriceMux.RUnlock()
 
 			prices := map[string]float64{

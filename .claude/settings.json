@@ -13,7 +13,16 @@
       "Bash(python -m py_compile tests/test_apis.py)",
       "mcp__claude_ai_Excalidraw__read_me",
       "mcp__claude_ai_Excalidraw__create_view",
-      "mcp__claude_ai_Excalidraw__export_to_excalidraw"
+      "mcp__claude_ai_Excalidraw__export_to_excalidraw",
+      "Bash(docker-compose up *)",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/public/deposit/webhook -H \"Content-Type: application/json\" -d '{\"id\":\"8f5c06cfc3ee3ac8\",\"state\":\"paid\"}')",
+      "Bash(curl -s -o /dev/null -w \"coingecko: %{http_code}\\\\n\" \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
+      "Bash(curl -s -o /dev/null -w \"er-api: %{http_code}\\\\n\" \"https://open.er-api.com/v6/latest/USD\")",
+      "Bash(curl -v --max-time 8 \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
+      "Bash(curl -sk --max-time 10 \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
+      "Bash(curl -sk --max-time 10 -o /dev/null -w \"http_code=%{http_code}\\\\n\" \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
+      "Bash(curl -skL --max-time 10 -D - -o /tmp/body.json \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
+      "Read(//tmp/**)"
     ]
   }
 }

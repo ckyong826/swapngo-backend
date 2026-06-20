@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"swapngo-backend/internal/clients"
 	"swapngo-backend/internal/models"
@@ -128,8 +129,18 @@ func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (walle
 		return wallet.WalletInfoResponse{}, errors.New("SUI wallet not found")
 	}
 
-	// All balances come from the ledger (single source of truth for every token,
-	// including MYRC and SUI). The chain is only touched at deposit/withdraw.
+	// MYRC has a real on-chain representation, so it follows the chain.
+	// Other tokens (BTC/ETH/USDT/USDC, plus the ledger's SUI entry) have no
+	// chain query available here and stay on the ledger.
+	chainMYRCStr, err := s.walletClient.GetBalance(ctx, models.ChainSui, suiWallet.Address)
+	if err != nil {
+		return wallet.WalletInfoResponse{}, fmt.Errorf("failed to fetch on-chain MYRC balance: %w", err)
+	}
+	chainMYRC, err := strconv.ParseFloat(chainMYRCStr, 64)
+	if err != nil {
+		return wallet.WalletInfoResponse{}, errors.New("invalid on-chain MYRC balance format")
+	}
+
 	ledgerBalances, err := s.tokenBalanceRepo.GetAllForAccount(ctx, accountID)
 	if err != nil {
 		return wallet.WalletInfoResponse{}, err
@@ -155,10 +166,14 @@ func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (walle
 	var balances []wallet.TokenBalance
 	var totalMYR float64
 	for _, tb := range ledgerBalances {
-		valueMYR := tb.Balance * tokenPriceMYR[tb.Token]
+		amount := tb.Balance
+		if tb.Token == models.MYRC {
+			amount = chainMYRC
+		}
+		valueMYR := amount * tokenPriceMYR[tb.Token]
 		balances = append(balances, wallet.TokenBalance{
 			Token:    string(tb.Token),
-			Amount:   tb.Balance,
+			Amount:   amount,
 			ValueMYR: valueMYR,
 		})
 		totalMYR += valueMYR
@@ -173,7 +188,23 @@ func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (walle
 }
 
 func (s *walletService) CheckBalanceByUserIDAndChain(ctx context.Context, userID string, chain models.ChainName, amount float64) (bool, error) {
-	balanceStr, err := s.GetMYRCBalanceByUserID(ctx, userID)
+	userUUID := uuid.Must(uuid.Parse(userID))
+	accounts, err := s.accountRepo.FindByUserID(ctx, userUUID)
+	if err != nil {
+		return false, err
+	}
+	if len(accounts) == 0 {
+		return false, errors.New("account not found")
+	}
+
+	// Check the live on-chain balance, not the ledger — a withdrawal must not
+	// proceed unless the chain actually holds enough funds to move.
+	w, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(chain))
+	if err != nil || w == nil {
+		return false, errors.New("wallet not found")
+	}
+
+	balanceStr, err := s.walletClient.GetBalance(ctx, chain, w.Address)
 	if err != nil {
 		return false, err
 	}
@@ -199,12 +230,13 @@ func (s *walletService) GetMYRCBalanceByUserID(ctx context.Context, userID strin
 		return "0", errors.New("multiple accounts found")
 	}
 
-	// MYRC balance is read from the ledger (source of truth), not the chain.
-	balance, err := s.tokenBalanceRepo.GetBalance(ctx, accounts[0].ID, models.MYRC)
-	if err != nil {
-		return "0", err
+	// MYRC has a real on-chain representation, so it's read from the chain,
+	// not the ledger.
+	w, err := s.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
+	if err != nil || w == nil {
+		return "0", errors.New("SUI wallet not found")
 	}
 
-	return strconv.FormatFloat(balance, 'f', -1, 64), nil
+	return s.walletClient.GetBalance(ctx, models.ChainSui, w.Address)
 }
 	

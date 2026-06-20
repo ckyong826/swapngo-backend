@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -13,6 +14,30 @@ var (
 	LatestPrices = make(map[string]string)
 	PriceMux     sync.RWMutex
 )
+
+// Fallback rates used when the live feed has no price yet (e.g. CoinGecko
+// unreachable/blocked, or fresh start before first poll). 1 USDT/USDC = 4 MYRC.
+const (
+	FallbackUSDMYR  = 4.0
+	FallbackBTCUSDT = 60000.0
+	FallbackETHUSDT = 1700.0
+	FallbackSUIUSDT = 1.0
+)
+
+// ParsePrice parses a cached price string, returning 0 on empty/invalid input.
+func ParsePrice(s string) float64 {
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
+
+// PriceOrFallback returns the cached price for key, or fallback if not yet available.
+// Caller must hold PriceMux (read lock is enough).
+func PriceOrFallback(key string, fallback float64) float64 {
+	if v := ParsePrice(LatestPrices[key]); v != 0 {
+		return v
+	}
+	return fallback
+}
 
 // StartPriceWorker polls CoinGecko every 30s for BTC/ETH/SUI prices
 // and polls open.er-api.com every 30s for USD/MYR rate.
