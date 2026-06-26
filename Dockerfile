@@ -26,10 +26,9 @@ RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 
-# Copy the binary and .env
+# Copy the binaries (env is injected at runtime via compose, not baked in)
 COPY --from=builder /app/api .
 COPY --from=builder /app/worker .
-COPY --from=builder /app/.env . 
 
 # 🌟 OPTIONAL: Set the environment variable so the OS defaults to your timezone
 ENV TZ=Asia/Kuala_Lumpur
