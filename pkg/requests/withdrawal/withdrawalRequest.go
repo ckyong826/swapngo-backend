@@ -11,4 +11,5 @@ type InitiateWithdrawReq struct {
 	DestinationDetails DestinationDetails `json:"destination_details" binding:"required"`
 	Token              string             `json:"token" binding:"required"`
 	Amount             float64            `json:"amount" binding:"required,gt=0"`
+	Pin                string             `json:"pin" binding:"required,len=4,numeric"`
 }

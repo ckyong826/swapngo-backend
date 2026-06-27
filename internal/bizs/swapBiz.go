@@ -23,7 +23,7 @@ import (
 const quoteValidFor = 30 * time.Second
 
 type SwapBiz interface {
-	InitiateSwap(ctx context.Context, userID, fromToken, toToken string, fromAmount, estimatedAmount, slippage float64) (*models.Swap, error)
+	InitiateSwap(ctx context.Context, userID, fromToken, toToken string, fromAmount, estimatedAmount, slippage float64, pin string) (*models.Swap, error)
 	ViewSwap(ctx context.Context, userID, id string) (*models.Swap, error)
 	ViewAllSwaps(ctx context.Context, userID string) ([]*models.Swap, error)
 	ProcessSwapEvent(ctx context.Context, orderID uuid.UUID, userAddress, fromToken, toToken, txDigest string, amountPaid, expectedAmount float64) error
@@ -53,7 +53,7 @@ func NewSwapBiz(db *gorm.DB, sr repositories.SwapRepository, ar repositories.Acc
 	}
 }
 
-func (b *swapBiz) InitiateSwap(ctx context.Context, userID, fromToken, toToken string, fromAmount, estimatedAmount, slippage float64) (*models.Swap, error) {
+func (b *swapBiz) InitiateSwap(ctx context.Context, userID, fromToken, toToken string, fromAmount, estimatedAmount, slippage float64, pin string) (*models.Swap, error) {
 	userUUID := uuid.Must(uuid.Parse(userID))
 
 	user, err := b.userRepo.FindByID(ctx, userUUID)
@@ -62,6 +62,9 @@ func (b *swapBiz) InitiateSwap(ctx context.Context, userID, fromToken, toToken s
 	}
 	if user.KycStatus != models.KycApproved {
 		return nil, fmt.Errorf("KYC not approved")
+	}
+	if err := verifyPin(user, pin); err != nil {
+		return nil, err
 	}
 
 	if fromToken == toToken {

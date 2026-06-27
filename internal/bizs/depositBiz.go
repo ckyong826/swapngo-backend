@@ -63,6 +63,9 @@ func (b *depositBiz) InitiateDepositMYRC(ctx context.Context, req *requests.Init
 	if user.KycStatus != models.KycApproved {
 		return nil, fmt.Errorf("KYC not approved")
 	}
+	if err := verifyPin(user, req.Pin); err != nil {
+		return nil, err
+	}
 
 	// 1. Get user account
 	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))

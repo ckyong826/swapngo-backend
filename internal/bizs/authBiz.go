@@ -18,6 +18,7 @@ import (
 type AuthBiz interface {
 	Register(ctx context.Context, req *authReq.RegisterRequest) (authRes.LoginResponse, error)
 	Login(ctx context.Context, req *authReq.LoginRequest) (authRes.LoginResponse, error)
+	VerifyPin(ctx context.Context, userID, pin string) error
 }
 
 type authBiz struct {
@@ -46,9 +47,6 @@ func (s *authBiz) Register(ctx context.Context, req *authReq.RegisterRequest) (a
 	}
 	if req.PhoneNumber == "" {
 		req.PhoneNumber = "auto-" + uuid.New().String()[:12]
-	}
-	if req.Pin == "" {
-		req.Pin = "0000"
 	}
 	if req.AccountName == "" {
 		req.AccountName = req.Username
@@ -95,10 +93,15 @@ func (s *authBiz) Login(ctx context.Context, req *authReq.LoginRequest) (authRes
 	// 1. Verify credentials
 	user, err := s.userService.VerifyUser(ctx, req)
 	if err != nil {
-		return authRes.LoginResponse{}, err 
+		return authRes.LoginResponse{}, err
 	}
 
 	return generateToken(user)
+}
+
+// VerifyPin gates the app-unlock screen (cold start / after login).
+func (s *authBiz) VerifyPin(ctx context.Context, userID, pin string) error {
+	return s.userService.VerifyPin(ctx, userID, pin)
 }
 
 /*

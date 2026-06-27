@@ -24,7 +24,7 @@ func NewTransferHandler(transferBiz bizs.TransferBiz) TransferHandler {
 
 func (h *transferHandler) TransferMYRC(ctx *gin.Context, req *transfer.InitiateTransferReq) (any, error) {
 	userID := ctx.GetString("user_id")
-	t, err := h.transferBiz.InitiateTransfer(ctx.Request.Context(), userID, req.Recipient, req.Amount)
+	t, err := h.transferBiz.InitiateTransfer(ctx.Request.Context(), userID, req.Recipient, req.Amount, req.Pin)
 	if err != nil {
 		return nil, err
 	}

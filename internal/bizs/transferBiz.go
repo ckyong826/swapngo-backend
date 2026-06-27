@@ -18,7 +18,7 @@ import (
 )
 
 type TransferBiz interface {
-	InitiateTransfer(ctx context.Context, userID, toAddress string, amount float64) (*models.Transfer, error)
+	InitiateTransfer(ctx context.Context, userID, toAddress string, amount float64, pin string) (*models.Transfer, error)
 	ProcessTransferEvent(ctx context.Context, transferID uuid.UUID, senderID, fromAddress, toAddress string, amount float64) error
 	ViewTransfer(ctx context.Context, userID, id string) (*models.Transfer, error)
 	ViewAllTransfers(ctx context.Context, userID string) ([]*models.Transfer, error)
@@ -48,13 +48,16 @@ func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr reposito
 	}
 }
 
-func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, toAddress string, amount float64) (*models.Transfer, error) {
+func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, toAddress string, amount float64, pin string) (*models.Transfer, error) {
 	user, err := b.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || user == nil {
 		return nil, fmt.Errorf("failed to fetch user")
 	}
 	if user.KycStatus != models.KycApproved {
 		return nil, fmt.Errorf("KYC not approved")
+	}
+	if err := verifyPin(user, pin); err != nil {
+		return nil, err
 	}
 
 	// 1. Fetch sender account and wallet

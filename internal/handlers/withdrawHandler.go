@@ -42,7 +42,7 @@ func (h *withdrawHandler) WithdrawMYRC(ctx *gin.Context, req *requests.InitiateW
 		bankAccountNo = req.DestinationDetails.SUIAddress
 	}
 
-	w, err := h.withdrawBiz.InitiateWithdrawal(ctx.Request.Context(), userID, req.Amount, bankName, bankAccountNo)
+	w, err := h.withdrawBiz.InitiateWithdrawal(ctx.Request.Context(), userID, req.Amount, bankName, bankAccountNo, req.Pin)
 	if err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ import (
 )
 
 type WithdrawBiz interface {
-	InitiateWithdrawal(ctx context.Context, userID string, amountMYRC float64, bankName, bankAccountNo string) (*models.Withdrawal, error)
+	InitiateWithdrawal(ctx context.Context, userID string, amountMYRC float64, bankName, bankAccountNo, pin string) (*models.Withdrawal, error)
 	ProcessWithdrawEvent(ctx context.Context, withdrawID uuid.UUID, userID string, amountMYRC, amountMYR float64, bankName, bankAccountNo string) error
 	ViewWithdraw(ctx context.Context, userID, id string) (*models.Withdrawal, error)
 	ViewAllWithdraws(ctx context.Context, userID string) ([]*models.Withdrawal, error)
@@ -53,13 +53,16 @@ func NewWithdrawBiz(db *gorm.DB, wr repositories.WithdrawRepository, ar reposito
 }
 
 // InitiateWithdrawal 
-func (b *withdrawBiz) InitiateWithdrawal(ctx context.Context, userID string, amountMYRC float64, bankName, bankAccountNo string) (*models.Withdrawal, error) {
+func (b *withdrawBiz) InitiateWithdrawal(ctx context.Context, userID string, amountMYRC float64, bankName, bankAccountNo, pin string) (*models.Withdrawal, error) {
 	user, err := b.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || user == nil {
 		return nil, fmt.Errorf("failed to fetch user")
 	}
 	if user.KycStatus != models.KycApproved {
 		return nil, fmt.Errorf("KYC not approved")
+	}
+	if err := verifyPin(user, pin); err != nil {
+		return nil, err
 	}
 
 	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))

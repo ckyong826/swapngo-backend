@@ -7,11 +7,14 @@ import (
 	"swapngo-backend/internal/repositories"
 	authReq "swapngo-backend/pkg/requests/auth"
 	"swapngo-backend/pkg/utils"
+
+	"github.com/google/uuid"
 )
 
 type UserService interface {
 	RegisterUser(ctx context.Context, req *authReq.RegisterRequest) (models.User, error)
 	VerifyUser(ctx context.Context, req *authReq.LoginRequest) (models.User, error)
+	VerifyPin(ctx context.Context, userID, pin string) error
 }
 
 type userService struct {
@@ -99,6 +102,21 @@ func (s *userService) VerifyUser(ctx context.Context, req *authReq.LoginRequest)
 	}
 
 	return *user, nil
+}
+
+// VerifyPin checks the user's 4-digit transaction PIN. Used by the app-unlock
+// screen (cold start / after login). ponytail: no attempt limit — see verifyPin
+// in internal/bizs/pin.go for the same brute-force caveat.
+func (s *userService) VerifyPin(ctx context.Context, userID, pin string) error {
+	user, err := s.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || user == nil {
+		return errors.New("user not found")
+	}
+	valid, err := utils.CheckPassword(user.PinHash, pin)
+	if err != nil || !valid {
+		return errors.New("invalid PIN")
+	}
+	return nil
 }
 		
 	

@@ -2,6 +2,7 @@ package requests
 
 type InitiateDepositReq struct {
 	AmountMYR float64 `json:"amount_myr" binding:"required,gt=0"`
+	Pin       string  `json:"pin" binding:"required,len=4,numeric"`
 }
 
 type WebhookReq struct {

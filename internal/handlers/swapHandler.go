@@ -40,6 +40,7 @@ func (h *swapHandler) InitiateExecute(ctx *gin.Context, req *swap.InitiateSwapRe
 		req.Amount,
 		req.EstimatedAmount,
 		slippage,
+		req.Pin,
 	)
 	if err != nil {
 		return nil, err
