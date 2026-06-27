@@ -91,6 +91,23 @@ services:
       KAFKA_BROKERS: kafka:29092
     restart: always
 
+  # Reverse proxy + auto HTTPS (Let's Encrypt) for swapngo.3utilities.com
+  caddy:
+    image: caddy:2-alpine
+    container_name: swapngo_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - backend
+    restart: always
+
 volumes:
   pgdata:
   kafkadata:
+  caddydata:
+  caddyconfig:

@@ -22,7 +22,8 @@
       "Bash(curl -sk --max-time 10 \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
       "Bash(curl -sk --max-time 10 -o /dev/null -w \"http_code=%{http_code}\\\\n\" \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
       "Bash(curl -skL --max-time 10 -D - -o /tmp/body.json \"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,sui&vs_currencies=usd\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(docker compose *)"
     ]
   }
 }
