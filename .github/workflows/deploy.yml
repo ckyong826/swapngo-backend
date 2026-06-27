@@ -49,6 +49,19 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      # Sync config files (not baked into the image) to the server each deploy
+      - name: Copy compose + Caddyfile to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          source: "docker-compose.prod.yml,Caddyfile"
+          target: "~/swapngo"
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
         with:
