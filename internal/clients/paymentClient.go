@@ -14,7 +14,7 @@ import (
 )
 
 type IPaymentClient interface {
-	CreateBill(ctx context.Context, email, name string, amount float64, description, callbackURL, collectionID string) (*CreateBillRes, error)
+	CreateBill(ctx context.Context, email, name string, amount float64, description, callbackURL, redirectURL, collectionID string) (*CreateBillRes, error)
 	PayoutToBank(ctx context.Context, amount float64, bankName, bankAccountNo string) (string, error)
 }
 
@@ -35,7 +35,7 @@ func NewBillplzClient(apiURL, apiKey string) IPaymentClient {
 	}
 }
 
-func (c *billplzClient) CreateBill(ctx context.Context, email, name string, amount float64, description, callbackURL, collectionID string) (*CreateBillRes, error) {
+func (c *billplzClient) CreateBill(ctx context.Context, email, name string, amount float64, description, callbackURL, redirectURL, collectionID string) (*CreateBillRes, error) {
 	// Billplz amount is in cents, so convert from MYR (float64) to cents (int)
 	amountInCents := int(amount * 100)
 
@@ -45,6 +45,9 @@ func (c *billplzClient) CreateBill(ctx context.Context, email, name string, amou
 	data.Set("name", name)
 	data.Set("amount", fmt.Sprintf("%d", amountInCents))
 	data.Set("callback_url", callbackURL)
+	if redirectURL != "" {
+		data.Set("redirect_url", redirectURL)
+	}
 	data.Set("description", description)
 
 	reqURL := fmt.Sprintf("%s/bills", c.apiURL)
