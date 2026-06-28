@@ -80,7 +80,13 @@ func (b *depositBiz) InitiateDepositMYRC(ctx context.Context, req *requests.Init
 	description := "Deposit to SwapNGo Wallet"
 
 	callbackURL := os.Getenv("BILLPLZ_CALLBACK_URL")
+	if callbackURL == "" {
+		callbackURL = "https://swapngo.3utilities.com/api/v1/public/deposit/webhook"
+	}
 	redirectURL := os.Getenv("BILLPLZ_REDIRECT_URL")
+	if redirectURL == "" {
+		redirectURL = "swapngo://deposit/status"
+	}
 	collectionID := os.Getenv("BILLPLZ_COLLECTION_ID")
 
 	// 3. Create Bill via paymentClient
