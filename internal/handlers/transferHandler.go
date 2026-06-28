@@ -9,6 +9,7 @@ import (
 )
 
 type TransferHandler interface {
+	ResolveRecipient(ctx *gin.Context, req *transfer.ResolveRecipientReq) (any, error)
 	TransferMYRC(ctx *gin.Context, req *transfer.InitiateTransferReq) (any, error)
 	ViewTransfer(ctx *gin.Context, _ *struct{}) (any, error)
 	ViewAllTransfers(ctx *gin.Context, _ *struct{}) (any, error)
@@ -20,6 +21,11 @@ type transferHandler struct {
 
 func NewTransferHandler(transferBiz bizs.TransferBiz) TransferHandler {
 	return &transferHandler{transferBiz: transferBiz}
+}
+
+func (h *transferHandler) ResolveRecipient(ctx *gin.Context, req *transfer.ResolveRecipientReq) (any, error) {
+	userID := ctx.GetString("user_id")
+	return h.transferBiz.ResolveRecipient(ctx.Request.Context(), userID, req.Q)
 }
 
 func (h *transferHandler) TransferMYRC(ctx *gin.Context, req *transfer.InitiateTransferReq) (any, error) {

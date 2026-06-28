@@ -2,8 +2,10 @@ package bizs
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"strings"
 
 	"swapngo-backend/internal/fsm"
 	"swapngo-backend/internal/kafka"
@@ -17,7 +19,13 @@ import (
 	"gorm.io/gorm"
 )
 
+type ResolvedRecipient struct {
+	Username   string `json:"username"`
+	SuiAddress string `json:"sui_address"`
+}
+
 type TransferBiz interface {
+	ResolveRecipient(ctx context.Context, userID, query string) (*ResolvedRecipient, error)
 	InitiateTransfer(ctx context.Context, userID, toAddress string, amount float64, pin string) (*models.Transfer, error)
 	ProcessTransferEvent(ctx context.Context, transferID uuid.UUID, senderID, fromAddress, toAddress string, amount float64) error
 	ViewTransfer(ctx context.Context, userID, id string) (*models.Transfer, error)
@@ -48,6 +56,66 @@ func NewTransferBiz(db *gorm.DB, tr repositories.TransferRepository, wr reposito
 	}
 }
 
+// resolveToAddress turns a recipient input (raw 0x address, username, or phone)
+// into a Sui address. This is the single authoritative resolution path — never
+// trust a client-supplied address that claims to map to a username.
+// callerAddr blocks self-sends.
+func (b *transferBiz) resolveToAddress(ctx context.Context, callerAddr, input string) (username, address string, err error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", "", fmt.Errorf("recipient is required")
+	}
+
+	if strings.HasPrefix(input, "0x") {
+		if len(input) != 66 {
+			return "", "", fmt.Errorf("invalid SUI address")
+		}
+		if _, hexErr := hex.DecodeString(input[2:]); hexErr != nil {
+			return "", "", fmt.Errorf("invalid SUI address")
+		}
+		if strings.EqualFold(input, callerAddr) {
+			return "", "", fmt.Errorf("cannot send to yourself")
+		}
+		return "", input, nil
+	}
+
+	// username or phone — let the DB match either. Empty email never matches a real user.
+	u, err := b.userRepo.CheckExist(ctx, input, "", input)
+	if err != nil || u == nil {
+		return "", "", fmt.Errorf("recipient not found")
+	}
+
+	accounts, err := b.accountRepo.FindByUserID(ctx, u.ID)
+	if err != nil || len(accounts) == 0 {
+		return "", "", fmt.Errorf("recipient cannot receive yet")
+	}
+	wallet, err := b.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
+	if err != nil || wallet == nil || wallet.Address == "" {
+		return "", "", fmt.Errorf("recipient cannot receive yet")
+	}
+	if strings.EqualFold(wallet.Address, callerAddr) {
+		return "", "", fmt.Errorf("cannot send to yourself")
+	}
+	return u.Username, wallet.Address, nil
+}
+
+func (b *transferBiz) ResolveRecipient(ctx context.Context, userID, query string) (*ResolvedRecipient, error) {
+	accounts, err := b.accountRepo.FindByUserID(ctx, uuid.Must(uuid.Parse(userID)))
+	if err != nil || len(accounts) == 0 {
+		return nil, fmt.Errorf("failed to fetch account")
+	}
+	fromWallet, err := b.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch wallet")
+	}
+
+	username, address, err := b.resolveToAddress(ctx, fromWallet.Address, query)
+	if err != nil {
+		return nil, err
+	}
+	return &ResolvedRecipient{Username: username, SuiAddress: address}, nil
+}
+
 func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, toAddress string, amount float64, pin string) (*models.Transfer, error) {
 	user, err := b.userRepo.FindByID(ctx, uuid.Must(uuid.Parse(userID)))
 	if err != nil || user == nil {
@@ -70,6 +138,12 @@ func (b *transferBiz) InitiateTransfer(ctx context.Context, userID string, toAdd
 	fromWallet, err := b.walletRepo.FindByAccountIdAndChain(ctx, accounts[0].ID, string(models.ChainSui))
 	if err != nil {
 		log.Printf("CRITICAL: Failed to fetch wallet for user %s", userID)
+		return nil, err
+	}
+
+	// Authoritatively resolve recipient (raw address / username / phone) server-side.
+	_, toAddress, err = b.resolveToAddress(ctx, fromWallet.Address, toAddress)
+	if err != nil {
 		return nil, err
 	}
 

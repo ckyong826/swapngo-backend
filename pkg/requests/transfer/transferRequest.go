@@ -1,5 +1,9 @@
 package transfer
 
+type ResolveRecipientReq struct {
+	Q string `form:"q" binding:"required"`
+}
+
 type InitiateTransferReq struct {
 	Recipient string  `json:"recipient" binding:"required"`
 	Token     string  `json:"token" binding:"required"`
