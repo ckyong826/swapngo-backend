@@ -5,4 +5,5 @@ type SubmitKYCRequest struct {
 	ICNumber     string `json:"ic_number" binding:"required"`
 	ICFrontPhoto string `json:"ic_front_photo" binding:"required"` // base64-encoded image
 	ICBackPhoto  string `json:"ic_back_photo" binding:"required"`  // base64-encoded image
+	SelfiePhoto  string `json:"selfie_photo" binding:"required"`   // base64-encoded live selfie
 }

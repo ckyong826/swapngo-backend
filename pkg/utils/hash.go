@@ -12,6 +12,10 @@ func HashPassword(password string) (string, error) {
 
 func CheckPassword(passwordHash string, password string) (bool, error){
 	err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
+	if err == bcrypt.ErrMismatchedHashAndPassword {
+		// Wrong password is a normal "false", not an error to propagate.
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}

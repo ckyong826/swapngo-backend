@@ -15,6 +15,7 @@ type KYC struct {
 	ICNumber     string    `gorm:"type:text;not null" json:"-"` // AES-encrypted
 	ICFrontPhoto string    `gorm:"type:text;not null" json:"-"` // AES-encrypted base64
 	ICBackPhoto  string    `gorm:"type:text;not null" json:"-"` // AES-encrypted base64
+	SelfiePhoto  string    `gorm:"type:text" json:"-"`          // AES-encrypted base64 live selfie
 	Status       string    `gorm:"type:varchar(20);default:'PENDING'" json:"status"`
 	Remarks      string    `gorm:"type:text" json:"remarks"`
 }

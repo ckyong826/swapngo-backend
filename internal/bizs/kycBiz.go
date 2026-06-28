@@ -73,6 +73,10 @@ func (b *kycBiz) SubmitKYC(ctx context.Context, userID string, req *kycReq.Submi
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt IC back photo")
 	}
+	encSelfie, err := utils.EncryptAES(b.encryptKey, req.SelfiePhoto)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt selfie photo")
+	}
 
 	kyc := &models.KYC{
 		UserID:       uid,
@@ -80,6 +84,7 @@ func (b *kycBiz) SubmitKYC(ctx context.Context, userID string, req *kycReq.Submi
 		ICNumber:     encIC,
 		ICFrontPhoto: encFront,
 		ICBackPhoto:  encBack,
+		SelfiePhoto:  encSelfie,
 		Status:       models.KYCStatusPending,
 	}
 
@@ -130,6 +135,7 @@ func (b *kycBiz) ListPendingKYC(ctx context.Context) (any, error) {
 		ICNumber     string `json:"ic_number"`
 		ICFrontPhoto string `json:"ic_front_photo"` // decrypted base64
 		ICBackPhoto  string `json:"ic_back_photo"`  // decrypted base64
+		SelfiePhoto  string `json:"selfie_photo"`   // decrypted base64
 		Status       string `json:"status"`
 		CreatedAt    any    `json:"created_at"`
 	}
@@ -139,6 +145,7 @@ func (b *kycBiz) ListPendingKYC(ctx context.Context) (any, error) {
 		icNum, _ := utils.DecryptAES(b.encryptKey, k.ICNumber)
 		icFront, _ := utils.DecryptAES(b.encryptKey, k.ICFrontPhoto)
 		icBack, _ := utils.DecryptAES(b.encryptKey, k.ICBackPhoto)
+		selfie, _ := utils.DecryptAES(b.encryptKey, k.SelfiePhoto)
 
 		items = append(items, kycItem{
 			KYCID:        k.ID.String(),
@@ -147,6 +154,7 @@ func (b *kycBiz) ListPendingKYC(ctx context.Context) (any, error) {
 			ICNumber:     icNum,
 			ICFrontPhoto: icFront,
 			ICBackPhoto:  icBack,
+			SelfiePhoto:  selfie,
 			Status:       k.Status,
 			CreatedAt:    k.CreatedAt,
 		})

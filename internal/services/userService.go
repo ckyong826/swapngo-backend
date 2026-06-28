@@ -89,7 +89,8 @@ func (s *userService) VerifyUser(ctx context.Context, req *authReq.LoginRequest)
 		return models.User{}, err
 	}
 	if user == nil {
-		return models.User{}, errors.New("user not found")
+		// Same message as a bad password so we don't leak which accounts exist.
+		return models.User{}, errors.New("invalid username or password")
 	}
 
 	// 2. Verify password
@@ -98,7 +99,7 @@ func (s *userService) VerifyUser(ctx context.Context, req *authReq.LoginRequest)
 		return models.User{}, err
 	}
 	if !valid {
-		return models.User{}, errors.New("invalid password")
+		return models.User{}, errors.New("invalid username or password")
 	}
 
 	return *user, nil
