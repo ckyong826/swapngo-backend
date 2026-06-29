@@ -163,17 +163,27 @@ func (s *walletService) GetWalletInfo(ctx context.Context, userID string) (walle
 		models.SUI:  suiUSD * usdMyr,
 	}
 
-	var balances []wallet.TokenBalance
+	balances := make([]wallet.TokenBalance, 0)
 	var totalMYR float64
+
+	// MYRC is always reported from its live on-chain balance, even when the
+	// ledger has no row yet (e.g. funds sent directly to the SUI address).
+	myrcValueMYR := chainMYRC * tokenPriceMYR[models.MYRC]
+	balances = append(balances, wallet.TokenBalance{
+		Token:    string(models.MYRC),
+		Amount:   chainMYRC,
+		ValueMYR: myrcValueMYR,
+	})
+	totalMYR += myrcValueMYR
+
 	for _, tb := range ledgerBalances {
-		amount := tb.Balance
 		if tb.Token == models.MYRC {
-			amount = chainMYRC
+			continue // already reported from chain above
 		}
-		valueMYR := amount * tokenPriceMYR[tb.Token]
+		valueMYR := tb.Balance * tokenPriceMYR[tb.Token]
 		balances = append(balances, wallet.TokenBalance{
 			Token:    string(tb.Token),
-			Amount:   amount,
+			Amount:   tb.Balance,
 			ValueMYR: valueMYR,
 		})
 		totalMYR += valueMYR
