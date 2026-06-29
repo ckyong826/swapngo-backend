@@ -43,18 +43,18 @@ func (h *transferHandler) TransferMYRC(ctx *gin.Context, req *transfer.InitiateT
 func (h *transferHandler) ViewTransfer(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
 	id := ctx.Param("id")
-	t, err := h.transferBiz.ViewTransfer(ctx.Request.Context(), userID, id)
+	t, accountID, err := h.transferBiz.ViewTransfer(ctx.Request.Context(), userID, id)
 	if err != nil {
 		return nil, err
 	}
-	return txRes.ToTransferResponse(t), nil
+	return txRes.ToTransferResponse(t, accountID), nil
 }
 
 func (h *transferHandler) ViewAllTransfers(ctx *gin.Context, _ *struct{}) (any, error) {
 	userID := ctx.GetString("user_id")
-	transfers, err := h.transferBiz.ViewAllTransfers(ctx.Request.Context(), userID)
+	transfers, accountID, err := h.transferBiz.ViewAllTransfers(ctx.Request.Context(), userID)
 	if err != nil {
 		return nil, err
 	}
-	return txRes.ToTransferResponses(transfers), nil
+	return txRes.ToTransferResponses(transfers, accountID), nil
 }

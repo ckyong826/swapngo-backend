@@ -3,11 +3,14 @@ package transaction
 import (
 	"swapngo-backend/internal/models"
 	"swapngo-backend/pkg/utils"
+
+	"github.com/google/uuid"
 )
 
 type TransferResponse struct {
 	ID           string  `json:"id"`
 	Status       string  `json:"status"`
+	Direction    string  `json:"direction"` // "sent" or "received", relative to the viewer
 	Recipient    string  `json:"recipient"`
 	Token        string  `json:"token"`
 	Amount       float64 `json:"amount"`
@@ -17,10 +20,15 @@ type TransferResponse struct {
 	UpdatedAt    string  `json:"updated_at"`
 }
 
-func ToTransferResponse(t *models.Transfer) TransferResponse {
+func ToTransferResponse(t *models.Transfer, viewerAccountID uuid.UUID) TransferResponse {
+	direction := "sent"
+	if t.SenderAccountID != viewerAccountID {
+		direction = "received"
+	}
 	r := TransferResponse{
 		ID:        t.ID.String(),
 		Status:    utils.NormalizeStatus(t.Status),
+		Direction: direction,
 		Recipient: t.ToAddress,
 		Token:     "MYRC",
 		Amount:    t.Amount,
@@ -33,10 +41,10 @@ func ToTransferResponse(t *models.Transfer) TransferResponse {
 	return r
 }
 
-func ToTransferResponses(transfers []*models.Transfer) []TransferResponse {
+func ToTransferResponses(transfers []*models.Transfer, viewerAccountID uuid.UUID) []TransferResponse {
 	result := make([]TransferResponse, len(transfers))
 	for i, t := range transfers {
-		result[i] = ToTransferResponse(t)
+		result[i] = ToTransferResponse(t, viewerAccountID)
 	}
 	return result
 }
